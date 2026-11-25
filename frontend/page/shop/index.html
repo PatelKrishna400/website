@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!-- Fredoka Google Font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Frontend — Powerup Shop</title>
+  <!-- Firebase SDK & Real-Time Cloud Connection -->
+  <script type="module" src="../../firebase-config.js"></script>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="dns-prefetch" href="//libtl.com">
+  <script
+    async
+    src="//libtl.com/sdk.js"
+    data-zone="11677609"
+    data-sdk="show_11677609">
+  </script>
+</head>
+<body>
+
+  <!-- Mobile View Screen Shell -->
+  <div class="mobile-container">
+    
+    <!-- Top Header Bar -->
+    <header class="home-header">
+      <div class="header-user">
+        <div class="user-avatar">🛍️</div>
+        <div class="user-meta">
+          <span class="user-name">Player</span>
+          <span class="user-level">ITEM SHOP</span>
+        </div>
+      </div>
+      <div class="header-pills">
+        <div class="coin-pill" id="coinPill" title="Total Coin Balance • Tap to manage" onclick="window.openBalanceManageModal && window.openBalanceManageModal('coins')">
+          <span>🪙</span>
+          <span class="coin-value" id="shopCoinsDisplayTop">0</span>
+        </div>
+        <div class="star-pill" id="starPill" title="Total Star Balance • Tap to manage" onclick="window.openBalanceManageModal && window.openBalanceManageModal('stars')">
+          <span>⭐</span>
+          <span class="star-value" id="shopStarsDisplayTop">0</span>
+        </div>
+        <div class="streak-pill" id="streakPill" title="Daily Streak Rewards • Tap to open" onclick="openDailyStreakModal()">
+          <span class="streak-logo">🔥</span>
+          <span class="streak-value" id="userStreakDisplay" style="display: none;">Day 1</span>
+          <span class="streak-badge-dot" id="streakNotificationDot" style="display: none;"></span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Page Content -->
+    <main class="page-content">
+      
+      <!-- Sleek Compact 3-Pill Balance Strip -->
+      <div class="shop-balance-strip">
+        <div class="shop-balance-pill coin-box">
+          <span class="pill-icon">🪙</span>
+          <div class="pill-meta">
+            <span class="pill-label">COINS</span>
+            <span class="pill-val" id="shopCoinsDisplay">0</span>
+          </div>
+        </div>
+        <div class="shop-balance-pill star-box">
+          <span class="pill-icon">⭐</span>
+          <div class="pill-meta">
+            <span class="pill-label">STARS</span>
+            <span class="pill-val" id="shopStarsDisplay">0</span>
+          </div>
+        </div>
+        <div class="shop-balance-pill ticket-box">
+          <span class="pill-icon">🎟️</span>
+          <div class="pill-meta">
+            <span class="pill-label">TICKETS</span>
+            <span class="pill-val" id="shopTicketsDisplay">0</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="tasks-banner">
+        <h1 class="tasks-title">Shop &amp; Rewards</h1>
+      </div>
+
+      <div class="shop-list">
+
+        <!-- 1. Free Coins / Watch Ad for +100 Coins -->
+        <div class="star-shop-card shop-item-coin shop-ad-card" id="adCoinsCard">
+          <div class="shop-icon-wrap" style="background: rgba(34, 197, 94, 0.2); border-color: #22c55e;">🪙</div>
+          <div class="shop-info">
+            <div class="shop-name">
+              <span>Free Coins</span>
+              <span class="star-pack-badge ad-badge" style="background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%); color: #fff;">+100 🪙</span>
+            </div>
+            <div style="font-size: 0.75rem; color: #94a3b8; font-weight: 600;">Watch 1 Ad to win 100 Coins!</div>
+          </div>
+          <button class="btn-buy btn-affordable" id="btnWatchAdCoins" onclick="watchAdForCoins(this)">Watch Ad 📺</button>
+        </div>
+
+        <!-- 2. 3,000 Coins Pack - Pay with Stars -->
+        <div class="star-shop-card shop-item-coin" id="starCard50">
+          <div class="shop-icon-wrap">🌟</div>
+          <div class="shop-info">
+            <div class="shop-name">
+              <span>3,000 Coins 🪙</span>
+              <span class="star-pack-badge">20%</span>
+            </div>
+            <div style="font-size: 0.75rem; color: #94a3b8; font-weight: 600;">3,000 Coins Pack • Pay with Stars</div>
+          </div>
+          <button class="btn-buy" id="btnBuyCoins50" onclick="buyCoinsWithStars(3000, 50, 'coin_pack_50')">50 ⭐</button>
+        </div>
+
+        <!-- 3. 6,000 Coins Pack - Pay with Stars -->
+        <div class="star-shop-card shop-item-coin" id="starCard100">
+          <div class="shop-icon-wrap">💎</div>
+          <div class="shop-info">
+            <div class="shop-name">
+              <span>6,000 Coins 🪙</span>
+              <span class="star-pack-badge">25%</span>
+            </div>
+            <div style="font-size: 0.75rem; color: #94a3b8; font-weight: 600;">6,000 Coins Pack • Pay with Stars</div>
+          </div>
+          <button class="btn-buy" id="btnBuyCoins100" onclick="buyCoinsWithStars(6000, 100, 'coin_pack_100')">100 ⭐</button>
+        </div>
+
+        <!-- 4. 30,000 Coins Pack - Best Value -->
+        <div class="star-shop-card shop-item-coin" id="starCard500">
+          <div class="shop-icon-wrap">🏆</div>
+          <div class="shop-info">
+            <div class="shop-name">
+              <span>30,000 Coins 🪙</span>
+              <span class="star-pack-badge">40%</span>
+            </div>
+            <div style="font-size: 0.75rem; color: #94a3b8; font-weight: 600;">30,000 Coins Pack • Best Value</div>
+          </div>
+          <button class="btn-buy" id="btnBuyCoins500" onclick="buyCoinsWithStars(30000, 500, 'coin_pack_500')">500 ⭐</button>
+        </div>
+
+      </div>
+
+      <!-- Ticket Store: Buy Tickets with Telegram Stars -->
+      <div class="shop-section-header shop-item-ticket">
+        <h3 class="shop-section-title">
+          <span>🎟️</span>
+          <span>Ticket Store</span>
+          <span class="shop-section-badge">Pay with Stars ⭐</span>
+        </h3>
+      </div>
+
+      <div class="shop-grid shop-item-ticket">
+
+        <!-- Free Tickets / Watch Ad for +1 Ticket -->
+        <div class="star-shop-card ticket-shop-card shop-item-ticket shop-ad-card" id="adTicketsCard">
+          <div class="shop-icon-wrap" style="background: rgba(34, 197, 94, 0.2); border-color: #22c55e;">🎟️</div>
+          <div class="shop-info">
+            <div class="shop-name">
+              <span>Free Tickets</span>
+              <span class="star-pack-badge ticket-badge ad-badge" style="background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%); color: #fff;">+1 🎟️</span>
+            </div>
+            <div style="font-size: 0.75rem; color: #94a3b8; font-weight: 600;">Watch 1 Ad to win 1 Free Ticket!</div>
+          </div>
+          <button class="btn-buy btn-affordable" id="btnWatchAdTickets" onclick="watchAdForTickets(this)">Watch Ad 📺</button>
+        </div>
+
+        <!-- 1. 100 Tickets for 150 Stars -->
+        <div class="star-shop-card ticket-shop-card shop-item-ticket" id="ticketCard100">
+          <div class="shop-icon-wrap">🎟️</div>
+          <div class="shop-info">
+            <div class="shop-name">
+              <span>100 Tickets 🎟️</span>
+              <span class="star-pack-badge ticket-badge">10%</span>
+            </div>
+            <div style="font-size: 0.75rem; color: #94a3b8; font-weight: 600;">100 Task Tickets • 10% OFF</div>
+          </div>
+          <button class="btn-buy" id="btnBuyTickets100" onclick="buyTicketsWithStars(100, 150, 'ticket_pack_100')">150 ⭐</button>
+        </div>
+
+        <!-- 2. 500 Tickets for 750 Stars -->
+        <div class="star-shop-card ticket-shop-card shop-item-ticket ticket-card-popular" id="ticketCard500">
+          <div class="shop-icon-wrap">🎟️</div>
+          <div class="shop-info">
+            <div class="shop-name">
+              <span>500 Tickets 🎟️</span>
+              <span class="star-pack-badge ticket-badge-popular">🔥 POPULAR</span>
+            </div>
+            <div style="font-size: 0.75rem; color: #94a3b8; font-weight: 600;">500 Task Tickets • Most Popular</div>
+          </div>
+          <button class="btn-buy" id="btnBuyTickets500" onclick="buyTicketsWithStars(500, 750, 'ticket_pack_500')">750 ⭐</button>
+        </div>
+
+        <!-- 3. 1,000 Tickets for 1,500 Stars -->
+        <div class="star-shop-card ticket-shop-card shop-item-ticket ticket-card-best" id="ticketCard1000">
+          <div class="shop-icon-wrap">👑</div>
+          <div class="shop-info">
+            <div class="shop-name">
+              <span>1,000 Tickets 🎟️</span>
+              <span class="star-pack-badge ticket-badge-best">👑 BEST VALUE</span>
+            </div>
+            <div style="font-size: 0.75rem; color: #94a3b8; font-weight: 600;">1,000 Task Tickets • Best Value</div>
+          </div>
+          <button class="btn-buy" id="btnBuyTickets1000" onclick="buyTicketsWithStars(1000, 1500, 'ticket_pack_1000')">1,500 ⭐</button>
+        </div>
+
+      </div>
+
+    </main>
+
+    <!-- Below Menu Bar (Shop Active, Leaderboard, Home Center, Wallet, Profile) -->
+    <nav class="below-menu-bar" id="belowMenuBar" aria-label="Bottom Navigation">
+      
+      <!-- 1. Shop Page Link (Active) -->
+      <a href="../shop/index.html" class="below-menu-item active" id="menuShop" title="Shop">
+        <div class="menu-icon-wrap">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <path d="M16 10a4 4 0 0 1-8 0"></path>
+          </svg>
+        </div>
+        <span class="menu-label">Shop</span>
+      </a>
+
+      <!-- 2. Leaderboard Page Link -->
+      <a href="../leaderboard/index.html" class="below-menu-item" id="menuLeaderboard" title="Leaderboard">
+        <div class="menu-icon-wrap">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path>
+            <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path>
+            <path d="M4 22h16"></path>
+            <path d="M10 14.66V17c0 .55-.45 1-1 1H7c-.55 0-1-.45-1-1v-2.34"></path>
+            <path d="M18 14.66V17c0 .55-.45 1-1 1h-2c-.55 0-1-.45-1-1v-2.34"></path>
+            <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"></path>
+          </svg>
+        </div>
+        <span class="menu-label">Ranks</span>
+      </a>
+
+      <!-- 3. Home Page Link (Center) -->
+      <a href="../home/index.html" class="below-menu-item center-home-btn" id="menuHome" title="Home">
+        <div class="center-home-icon-wrap">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+            <polyline points="9 22 9 12 15 12 15 22"></polyline>
+          </svg>
+        </div>
+        <span class="menu-label">Home</span>
+      </a>
+
+      <!-- 4. Wallet Page Link -->
+      <a href="../wallet/index.html" class="below-menu-item" id="menuWallet" title="Wallet">
+        <div class="menu-icon-wrap">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"></path>
+            <path d="M3 5v14a2 2 0 0 0 2 2h16v-5"></path>
+            <path d="M18 12a2 2 0 0 0 0 4h4v-4Z"></path>
+          </svg>
+        </div>
+        <span class="menu-label">Wallet</span>
+      </a>
+
+      <!-- 5. Profile Page Link -->
+      <a href="../profile/index.html" class="below-menu-item" id="menuProfile" title="Profile">
+        <div class="menu-icon-wrap">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path>
+            <circle cx="12" cy="7" r="4"></circle>
+          </svg>
+        </div>
+        <span class="menu-label">Profile</span>
+      </a>
+
+    </nav>
+
+    <!-- Rewarded Ad Watching Modal Overlay -->
+    <div id="shopAdModal" class="shop-ad-modal-overlay" style="display: none;" onclick="if(event.target===this) this.style.display='none'">
+      <div class="shop-ad-modal-content" onclick="event.stopPropagation()">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+          <div class="shop-ad-badge">Sponsored Advertisement 📺</div>
+          <button type="button" onclick="document.getElementById('shopAdModal').style.display='none'" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #fff; width: 26px; height: 26px; border-radius: 50%; cursor: pointer; font-size: 0.8rem; font-weight: 900; display: flex; align-items: center; justify-content: center;" title="Cancel">✕</button>
+        </div>
+        <div class="shop-ad-video-mock">
+          <div class="shop-ad-spinner"></div>
+          <div class="shop-ad-timer-text" id="shopAdTimerText">Playing Ad... 5s</div>
+        </div>
+        <div class="shop-ad-meta">Please wait while the ad completes to claim your reward!</div>
+      </div>
+    </div>
+
+    <!-- Toast Notification for Purchase & Error States -->
+    <div id="shopToast" class="arcade-toast-pill" style="display: none;">
+      <span id="shopToastMsg">Notification</span>
+    </div>
+
+  </div>
+
+  <script src="../../ad-service.js"></script>
+  <script src="script.js"></script>
+  <script src="../../daily-streak.js"></script>
+</body>
+</html>

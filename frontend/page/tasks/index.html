@@ -1,0 +1,2774 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Missions & Rewards — Telegram Game</title>
+
+  <!-- Google Fonts: Fredoka & Titan One / Lilita One -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700;800;900&family=Lilita+One&family=Titan+One&display=swap" rel="stylesheet" />
+
+  <link rel="dns-prefetch" href="//libtl.com" />
+  <!-- Rewarded Ads SDK -->
+  <script
+    async
+    src="//libtl.com/sdk.js"
+    data-zone="11677609"
+    data-sdk="show_11677609">
+  </script>
+
+  <!-- Universal Ad Service & Sponsor Links -->
+  <script src="../../ad-service.js"></script>
+
+  <!-- Firebase SDK & Real-Time Cloud Connection -->
+  <script type="module" src="../../firebase-config.js"></script>
+
+  <!-- Inherit Cyber Theme CSS -->
+  <link rel="stylesheet" href="../home/style.css" />
+
+  <style>
+    :root {
+      --font-display: "Titan One", "Lilita One", cursive, sans-serif;
+      --font-ui: "Fredoka", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --cyber-blue: #38bdf8;
+      --cyber-gold: #facc15;
+      --cyber-green: #34d399;
+      --cyber-purple: #c084fc;
+      --bg-dark: #060e24;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+
+    html, body {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: var(--font-ui);
+      background-color: #030816;
+      color: #f8fafc;
+      overflow-x: hidden;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+    }
+
+    /* Outer Mobile View Shell matching Telegram WebApp / Home page */
+    .mobile-container {
+      width: 100%;
+      max-width: 440px;
+      min-height: 100vh;
+      background-color: #060e24;
+      background-image: radial-gradient(circle at 50% 12%, rgba(14, 165, 233, 0.12) 0%, transparent 65%);
+      border-left: 1px solid rgba(56, 189, 248, 0.15);
+      border-right: 1px solid rgba(56, 189, 248, 0.15);
+      box-shadow: 0 0 50px rgba(0, 0, 0, 0.7), 0 0 20px rgba(56, 189, 248, 0.08);
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      padding-bottom: 84px;
+      box-sizing: border-box;
+    }
+
+    /* Outlines & Game Typography */
+    .game-outline {
+      font-family: var(--font-display);
+      color: #ffffff;
+      -webkit-text-stroke: 1.5px #051126;
+      paint-order: stroke fill;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8), 0 0 10px rgba(56, 189, 248, 0.4);
+      letter-spacing: 0.5px;
+      line-height: 1;
+    }
+    .game-outline-sm {
+      font-family: var(--font-display);
+      color: #ffffff;
+      -webkit-text-stroke: 1.2px #051126;
+      paint-order: stroke fill;
+      text-shadow: 0 1.5px 3px rgba(0, 0, 0, 0.8), 0 0 8px rgba(56, 189, 248, 0.35);
+      line-height: 1;
+    }
+
+    /* Header Ticket Pill (matches Home & Pass pages) */
+    .ticket-pill {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      background: linear-gradient(135deg, rgba(244, 114, 182, 0.18) 0%, #0a1738 100%);
+      border: 1px solid #f472b6;
+      padding: 0.3rem 0.65rem;
+      border-radius: 9999px;
+      font-weight: 800;
+      color: #f472b6;
+      font-size: 0.825rem;
+      box-shadow: 0 2px 8px rgba(244, 114, 182, 0.25);
+      transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+      cursor: pointer;
+    }
+    .ticket-pill:active { transform: scale(0.96); }
+    .ticket-pill .ticket-value { color: #f472b6; font-weight: 900; }
+
+    /* Main Page Content */
+    .page-content {
+      flex: 1;
+      padding: 1.1rem 1rem 3rem 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.95rem;
+    }
+
+    /* ======================================================================
+       TELEGRAM GAME HERO CARD (Prominent Balance Display & Animation)
+       ====================================================================== */
+    .tg-hero-card {
+      position: relative;
+      background: linear-gradient(160deg, #0d1e47 0%, #071333 100%);
+      border: 2px solid rgba(56, 189, 248, 0.4);
+      border-radius: 20px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.65), 0 0 20px rgba(56, 189, 248, 0.18), inset 0 1.5px 0 rgba(255, 255, 255, 0.15);
+      padding: 1.4rem 1.1rem 1.15rem 1.1rem;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      box-sizing: border-box;
+      overflow: hidden;
+    }
+
+    .tg-hero-card::before {
+      content: '';
+      position: absolute;
+      top: -30%;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 220px;
+      height: 220px;
+      background: radial-gradient(circle, rgba(56, 189, 248, 0.25) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .tg-hero-icon-wrap {
+      position: relative;
+      z-index: 2;
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2.8rem;
+      margin-bottom: 0.4rem;
+      filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.7));
+      animation: tgIconFloat 3s ease-in-out infinite;
+    }
+
+    @keyframes tgIconFloat {
+      0%, 100% { transform: translateY(0) scale(1); }
+      50% { transform: translateY(-6px) scale(1.05); }
+    }
+
+    .tg-hero-balance-val {
+      position: relative;
+      z-index: 2;
+      font-size: 2.35rem;
+      line-height: 1.1;
+      letter-spacing: 0.5px;
+      margin-bottom: 0.2rem;
+    }
+
+    .tg-hero-sub {
+      position: relative;
+      z-index: 2;
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: #94a3b8;
+      margin-bottom: 0.95rem;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      justify-content: center;
+    }
+
+    /* Hero Progress Bar Track */
+    .tg-hero-progress-wrap {
+      position: relative;
+      z-index: 2;
+      width: 100%;
+      background: rgba(3, 8, 22, 0.85);
+      border: 1.5px solid rgba(56, 189, 248, 0.3);
+      border-radius: 12px;
+      height: 22px;
+      display: flex;
+      align-items: center;
+      padding: 2px;
+      box-sizing: border-box;
+      overflow: hidden;
+      margin-bottom: 0.75rem;
+    }
+
+    .tg-hero-progress-fill {
+      height: 100%;
+      border-radius: 8px;
+      background: linear-gradient(90deg, #06b6d4 0%, #0ea5e9 50%, #38bdf8 100%);
+      box-shadow: 0 0 12px rgba(56, 189, 248, 0.7);
+      transition: width 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .tg-hero-progress-text {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.7rem;
+      font-weight: 800;
+      color: #ffffff;
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+      letter-spacing: 0.3px;
+    }
+
+    /* Hero Quick Action Strip */
+    .tg-hero-action-strip {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .btn-hero-action {
+      flex: 1;
+      padding: 0.5rem 0.85rem;
+      border-radius: 10px;
+      font-size: 0.76rem;
+      font-weight: 800;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .btn-hero-action:active { transform: scale(0.96); }
+
+    .btn-action-gold {
+      background: linear-gradient(155deg, #facc15 0%, #f59e0b 50%, #d97706 100%);
+      border: 1.5px solid #fef08a;
+      color: #422006;
+      box-shadow: 0 3px 10px rgba(245, 158, 11, 0.45);
+    }
+    .btn-action-cyan {
+      background: linear-gradient(155deg, #0284c7 0%, #0369a1 100%);
+      border: 1.5px solid #38bdf8;
+      color: #ffffff;
+      box-shadow: 0 3px 10px rgba(14, 165, 233, 0.45);
+    }
+    .btn-action-emerald {
+      background: linear-gradient(155deg, #10b981 0%, #059669 100%);
+      border: 1.5px solid #6ee7b7;
+      color: #ffffff;
+      box-shadow: 0 3px 10px rgba(16, 185, 129, 0.45);
+    }
+    .btn-action-purple {
+      background: linear-gradient(155deg, #a21caf 0%, #c026d3 50%, #d946ef 100%);
+      color: #ffffff;
+      border: 1.5px solid #f0abfc;
+      box-shadow: 0 3px 10px rgba(192, 38, 211, 0.45);
+    }
+
+    /* Switcher tabs removed per user request: dedicated category pages show their respective tasks directly */
+    .tg-switcher-tabs {
+      display: none !important;
+    }
+
+    /* Category Switcher Tabs - Permanently Hidden per user request */
+    .tg-tab-bar, #categoryTabs {
+      display: none !important;
+    }
+
+    .tg-tab-btn {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.35rem;
+      padding: 0.6rem 0.5rem;
+      border-radius: 10px;
+      font-size: 0.8rem;
+      font-weight: 800;
+      color: #94a3b8;
+      text-decoration: none;
+      transition: all 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+      position: relative;
+      border: 1px solid transparent;
+      cursor: pointer;
+    }
+    .tg-tab-btn:hover {
+      color: #ffffff;
+      background: rgba(56, 189, 248, 0.1);
+    }
+
+    /* Active Tab Styles */
+    .tg-tab-btn.active-coin {
+      background: linear-gradient(155deg, #ca8a04 0%, #eab308 50%, #facc15 100%);
+      color: #422006;
+      border-color: #fef08a;
+      box-shadow: 0 4px 14px rgba(234, 179, 8, 0.55), inset 0 1px 1px rgba(255, 255, 255, 0.6);
+    }
+    .tg-tab-btn.active-common,
+    .tg-tab-btn.active-task {
+      background: linear-gradient(155deg, #0284c7 0%, #1d4ed8 50%, #0c1a3d 100%);
+      color: #ffffff;
+      border-color: #38bdf8;
+      box-shadow: 0 4px 14px rgba(2, 132, 199, 0.55), inset 0 1.5px 1px rgba(147, 197, 253, 0.45);
+    }
+    .tg-tab-btn.active-star {
+      background: linear-gradient(155deg, #7e22ce 0%, #9333ea 50%, #facc15 100%);
+      color: #ffffff;
+      border-color: #fde047;
+      box-shadow: 0 4px 14px rgba(147, 51, 234, 0.55), inset 0 1.5px 1px rgba(254, 240, 138, 0.5);
+    }
+    .tg-tab-btn.active-pro {
+      background: linear-gradient(155deg, #059669 0%, #10b981 50%, #34d399 100%);
+      color: #022c22;
+      border-color: #6ee7b7;
+      box-shadow: 0 4px 14px rgba(16, 185, 129, 0.55), inset 0 1.5px 1px rgba(255, 255, 255, 0.6);
+    }
+    .tg-tab-btn.active-ultra {
+      background: linear-gradient(155deg, #a21caf 0%, #c026d3 50%, #f0abfc 100%);
+      color: #3b0764;
+      border-color: #f5d0fe;
+      box-shadow: 0 4px 14px rgba(192, 38, 211, 0.55), inset 0 1.5px 1px rgba(255, 255, 255, 0.6);
+    }
+
+    .tg-tab-badge {
+      font-size: 0.58rem;
+      font-weight: 900;
+      padding: 0.12rem 0.4rem;
+      border-radius: 999px;
+      line-height: 1;
+    }
+
+    /* ======================================================================
+       CATEGORY BANNER & VIP / EVENT PROMOS
+       ====================================================================== */
+    .cat-status-banner {
+      background: linear-gradient(155deg, rgba(14, 27, 60, 0.85) 0%, rgba(6, 14, 36, 0.95) 100%);
+      border: 1.5px solid rgba(56, 189, 248, 0.28);
+      border-radius: 16px;
+      padding: 0.85rem 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+    }
+
+    /* ======================================================================
+       INTERACTIVE TELEGRAM TASK CARDS
+       ====================================================================== */
+    .tg-task-card {
+      background: linear-gradient(155deg, rgba(10, 23, 56, 0.85) 0%, rgba(6, 14, 36, 0.92) 100%);
+      border: 1.5px solid rgba(56, 189, 248, 0.25);
+      border-radius: 16px;
+      padding: 0.85rem 0.95rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45), inset 0 1px 1px rgba(255, 255, 255, 0.08);
+      transition: all 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+      margin-bottom: 0.65rem;
+    }
+    .tg-task-card:hover {
+      border-color: rgba(56, 189, 248, 0.55);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 22px rgba(0, 0, 0, 0.6), 0 0 16px rgba(56, 189, 248, 0.2);
+    }
+    .tg-task-card.completed {
+      border-color: rgba(16, 185, 129, 0.35);
+      background: rgba(16, 185, 129, 0.08);
+      opacity: 0.85;
+    }
+
+    .tg-task-num-badge {
+      width: 38px;
+      height: 38px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-display);
+      font-size: 1.05rem;
+      flex-shrink: 0;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.3);
+    }
+    .badge-coin {
+      background: linear-gradient(155deg, #ca8a04 0%, #eab308 100%);
+      border: 1.5px solid #fef08a;
+      color: #422006;
+      box-shadow: 0 0 10px rgba(250, 204, 21, 0.4);
+    }
+    .badge-star {
+      background: linear-gradient(155deg, #7e22ce 0%, #9333ea 100%);
+      border: 1.5px solid #f472b6;
+      color: #fef08a;
+      box-shadow: 0 0 10px rgba(219, 39, 119, 0.4);
+    }
+    .badge-pro {
+      background: linear-gradient(155deg, #059669 0%, #10b981 100%);
+      border: 1.5px solid #6ee7b7;
+      color: #ffffff;
+      box-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
+    }
+    .badge-ultra {
+      background: linear-gradient(155deg, #a21caf 0%, #c026d3 50%, #f0abfc 100%);
+      border: 1.5px solid #f5d0fe;
+      color: #3b0764;
+      box-shadow: 0 0 10px rgba(192, 38, 211, 0.45);
+    }
+    .badge-quiz {
+      background: linear-gradient(155deg, #059669 0%, #10b981 100%);
+      border: 1.5px solid #6ee7b7;
+      color: #ffffff;
+      box-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
+    }
+
+    .tg-task-info {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .tg-task-title-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .tg-task-title {
+      font-size: 0.88rem;
+      font-weight: 800;
+      color: #ffffff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 175px;
+    }
+    .tg-task-bounty-pill {
+      font-size: 0.72rem;
+      font-weight: 800;
+      padding: 1.5px 7px;
+      border-radius: 999px;
+      white-space: nowrap;
+    }
+    .bounty-coin {
+      background: rgba(250, 204, 21, 0.18);
+      border: 1px solid rgba(250, 204, 21, 0.45);
+      color: #fde047;
+    }
+    .bounty-star {
+      background: rgba(192, 132, 252, 0.2);
+      border: 1px solid rgba(192, 132, 252, 0.45);
+      color: #facc15;
+    }
+    .bounty-pro {
+      background: rgba(52, 211, 153, 0.2);
+      border: 1px solid rgba(52, 211, 153, 0.45);
+      color: #34d399;
+    }
+    .bounty-ultra {
+      background: rgba(217, 70, 239, 0.22);
+      border: 1px solid rgba(217, 70, 239, 0.5);
+      color: #f0abfc;
+    }
+    .bounty-quiz {
+      background: rgba(16, 185, 129, 0.2);
+      border: 1px solid rgba(52, 211, 153, 0.5);
+      color: #6ee7b7;
+    }
+
+    /* Interactive Quiz Options */
+    .quiz-opt-btn {
+      width: 100%;
+      padding: 0.65rem 0.85rem;
+      border-radius: 10px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      text-align: left;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(15, 23, 42, 0.75);
+      border: 1.5px solid rgba(56, 189, 248, 0.3);
+      color: #e2e8f0;
+      transition: all 0.2s ease;
+    }
+    .quiz-opt-btn:hover {
+      background: rgba(56, 189, 248, 0.18);
+      border-color: #38bdf8;
+      color: #ffffff;
+      transform: translateX(3px);
+    }
+    .quiz-opt-btn.correct {
+      background: rgba(16, 185, 129, 0.85) !important;
+      border-color: #6ee7b7 !important;
+      color: #ffffff !important;
+      box-shadow: 0 0 12px rgba(16, 185, 129, 0.5);
+    }
+    .quiz-opt-btn.wrong {
+      background: rgba(239, 68, 68, 0.85) !important;
+      border-color: #fca5a5 !important;
+      color: #ffffff !important;
+      animation: shake 0.3s;
+    }
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      20%, 60% { transform: translateX(-5px); }
+      40%, 80% { transform: translateX(5px); }
+    }
+
+    .tg-task-desc {
+      font-size: 0.72rem;
+      color: #94a3b8;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Tactile 3D Action Buttons */
+    .tg-task-actions {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    .btn-tg-open {
+      padding: 0.48rem 0.8rem;
+      font-size: 0.78rem;
+      font-weight: 800;
+      background: linear-gradient(155deg, #0284c7 0%, #0369a1 100%);
+      border: 1.5px solid #38bdf8;
+      color: #ffffff;
+      border-radius: 10px;
+      cursor: pointer;
+      box-shadow: 0 3px 10px rgba(14, 165, 233, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+      transition: all 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .btn-tg-open:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(14, 165, 233, 0.6); }
+    .btn-tg-open:active { transform: scale(0.95); }
+
+    .btn-tg-verify {
+      padding: 0.48rem 0.85rem;
+      font-size: 0.78rem;
+      font-weight: 900;
+      background: linear-gradient(155deg, #10b981 0%, #059669 100%);
+      border: 1.5px solid #6ee7b7;
+      color: #ffffff;
+      border-radius: 10px;
+      cursor: pointer;
+      box-shadow: 0 3px 10px rgba(16, 185, 129, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+      transition: all 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .btn-tg-verify:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(16, 185, 129, 0.6); }
+    .btn-tg-verify:active { transform: scale(0.95); }
+
+    .tg-task-completed-pill {
+      font-size: 0.74rem;
+      font-weight: 800;
+      color: #34d399;
+      background: rgba(16, 185, 129, 0.2);
+      border: 1px solid rgba(52, 211, 153, 0.5);
+      padding: 4px 10px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    /* Modal Backdrop and Card */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(3, 8, 22, 0.88);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      z-index: 10005;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      box-sizing: border-box;
+    }
+    @keyframes modalPop {
+      0% { transform: scale(0.92) translateY(10px); opacity: 0; }
+      100% { transform: scale(1) translateY(0); opacity: 1; }
+    }
+    .reward-modal-card {
+      background: linear-gradient(160deg, #0b1a3d 0%, #060e24 100%);
+      border: 2px solid rgba(56, 189, 248, 0.4);
+      border-radius: 20px;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.8), 0 0 24px rgba(56, 189, 248, 0.25);
+      max-width: 360px;
+      width: 100%;
+      text-align: center;
+      padding: 1.5rem;
+      box-sizing: border-box;
+      position: relative;
+      animation: modalPop 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .modal-reward-title {
+      font-size: 1.35rem;
+      margin-bottom: 0.35rem;
+      color: #ffffff;
+    }
+    .modal-track-badge {
+      display: inline-block;
+      padding: 3px 12px;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      font-weight: 800;
+      margin-bottom: 0.85rem;
+    }
+    .modal-reward-desc {
+      font-size: 0.82rem;
+      color: #cbd5e1;
+      line-height: 1.45;
+      margin-bottom: 1.25rem;
+    }
+    .modal-btn-close {
+      flex: 1;
+      padding: 0.65rem;
+      border-radius: 12px;
+      background: rgba(30, 41, 59, 0.85);
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      color: #cbd5e1;
+      font-weight: 800;
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .modal-btn-close:hover { background: rgba(51, 65, 85, 0.9); color: #ffffff; }
+    .modal-btn-close:active { transform: scale(0.96); }
+    .modal-btn-claim {
+      flex: 1;
+      padding: 0.65rem;
+      border-radius: 12px;
+      font-weight: 900;
+      font-size: 0.8rem;
+      cursor: pointer;
+      background: linear-gradient(155deg, #10b981 0%, #059669 100%);
+      border: 1.5px solid #6ee7b7;
+      color: #ffffff;
+      box-shadow: 0 4px 14px rgba(16, 185, 129, 0.5);
+      transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .modal-btn-claim:active { transform: scale(0.96); }
+
+    /* Toast Notification */
+    .arcade-toast-pill {
+      position: fixed;
+      bottom: 84px;
+      left: 50%;
+      transform: translateX(-50%) translateY(12px);
+      z-index: 10010;
+      pointer-events: none;
+      transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+      opacity: 0;
+      padding: 0.6rem 1.1rem;
+      border-radius: 999px;
+      background: rgba(10, 23, 56, 0.95);
+      border: 1.5px solid #38bdf8;
+      color: #ffffff;
+      font-weight: 800;
+      font-size: 0.8rem;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7), 0 0 16px rgba(56, 189, 248, 0.4);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    /* VIP Subscription Modal Overlay & Cards */
+    .modal-backdrop.vip-modal-overlay,
+    .vip-modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(3, 8, 22, 0.92);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      z-index: 10010;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      box-sizing: border-box;
+      overflow-y: auto;
+    }
+    .vip-modal-box {
+      background: linear-gradient(170deg, #0f172a 0%, #1e1b4b 60%, #090d16 100%);
+      border: 1.5px solid rgba(250, 204, 21, 0.5);
+      border-radius: 20px;
+      max-width: 420px;
+      width: 100%;
+      padding: 1.5rem 1.2rem;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8), 0 0 25px rgba(250, 204, 21, 0.25);
+      position: relative;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-sizing: border-box;
+      animation: modalPop 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .vip-modal-close-btn {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #ffffff;
+      font-size: 1.1rem;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+    .vip-modal-close-btn:hover {
+      background: rgba(239, 68, 68, 0.4);
+      border-color: #ef4444;
+    }
+    .vip-modal-header {
+      text-align: center;
+      margin-bottom: 1.2rem;
+    }
+    .vip-crown-badge {
+      font-size: 2.8rem;
+      margin-bottom: 0.3rem;
+      filter: drop-shadow(0 4px 10px rgba(250, 204, 21, 0.5));
+    }
+    .vip-modal-title {
+      font-size: 1.4rem;
+      font-weight: 900;
+      color: #fde047;
+      margin: 0 0 0.35rem 0;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      text-shadow: 0 2px 8px rgba(250, 204, 21, 0.4);
+    }
+    .vip-modal-subtitle {
+      font-size: 0.78rem;
+      color: #cbd5e1;
+      margin: 0 0 0.8rem 0;
+      line-height: 1.4;
+    }
+    .vip-balance-strip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(250, 204, 21, 0.3);
+      padding: 5px 14px;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      color: #e2e8f0;
+    }
+    .vip-balance-pill {
+      color: #fde047;
+      font-weight: 800;
+    }
+    .vip-plans-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 1rem;
+    }
+    .vip-plan-card {
+      background: rgba(15, 23, 42, 0.75);
+      border: 1.5px solid rgba(255, 255, 255, 0.12);
+      border-radius: 14px;
+      padding: 12px;
+      position: relative;
+      transition: transform 0.2s, border-color 0.2s;
+    }
+    .vip-plan-card:hover {
+      transform: translateY(-2px);
+      border-color: rgba(250, 204, 21, 0.5);
+    }
+    .vip-plan-card.popular-plan {
+      border-color: rgba(245, 158, 11, 0.6);
+      background: linear-gradient(160deg, rgba(30, 27, 75, 0.8) 0%, rgba(15, 23, 42, 0.85) 100%);
+    }
+    .vip-plan-card.best-value-plan {
+      border-color: rgba(168, 85, 247, 0.7);
+      background: linear-gradient(160deg, rgba(88, 28, 135, 0.35) 0%, rgba(15, 23, 42, 0.9) 100%);
+    }
+    .plan-discount-badge {
+      font-size: 0.68rem;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 3px 8px;
+      border-radius: 6px;
+      display: inline-block;
+      margin-bottom: 8px;
+    }
+    .starter-badge {
+      background: rgba(56, 189, 248, 0.2);
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.4);
+    }
+    .popular-badge {
+      background: rgba(245, 158, 11, 0.25);
+      color: #fde047;
+      border: 1px solid rgba(245, 158, 11, 0.5);
+    }
+    .best-badge {
+      background: rgba(168, 85, 247, 0.25);
+      color: #c084fc;
+      border: 1px solid rgba(168, 85, 247, 0.5);
+    }
+    .plan-card-body {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .plan-duration-badge {
+      font-size: 0.75rem;
+      font-weight: 800;
+      color: #94a3b8;
+      text-transform: uppercase;
+    }
+    .plan-price-row {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+    }
+    .plan-price-stars {
+      font-size: 1.6rem;
+      font-weight: 900;
+      color: #ffffff;
+    }
+    .plan-price-unit {
+      font-size: 0.9rem;
+      font-weight: 800;
+      color: #fde047;
+    }
+    .plan-rate-sub {
+      font-size: 0.72rem;
+      color: #94a3b8;
+    }
+    .plan-task-limit-pill {
+      font-size: 0.72rem;
+      font-weight: 800;
+      padding: 3px 8px;
+      border-radius: 6px;
+      display: inline-block;
+      margin: 4px 0;
+      width: fit-content;
+    }
+    .starter-pill {
+      background: rgba(56, 189, 248, 0.15);
+      color: #7dd3fc;
+      border: 1px solid rgba(56, 189, 248, 0.3);
+    }
+    .popular-pill {
+      background: rgba(250, 204, 21, 0.15);
+      color: #fde047;
+      border: 1px solid rgba(250, 204, 21, 0.3);
+    }
+    .best-pill {
+      background: rgba(168, 85, 247, 0.2);
+      color: #e9d5ff;
+      border: 1px solid rgba(168, 85, 247, 0.4);
+    }
+    .plan-features-list {
+      list-style: none;
+      padding: 0;
+      margin: 6px 0;
+      font-size: 0.73rem;
+      color: #cbd5e1;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .btn-buy-vip-plan {
+      width: 100%;
+      padding: 0.65rem 1rem;
+      border-radius: 10px;
+      font-weight: 900;
+      font-size: 0.8rem;
+      cursor: pointer;
+      border: none;
+      background: linear-gradient(135deg, #38bdf8 0%, #0284c7 100%);
+      color: #ffffff;
+      box-shadow: 0 4px 12px rgba(2, 132, 199, 0.4);
+      transition: all 0.2s;
+      margin-top: 4px;
+    }
+    .btn-buy-vip-plan.popular-btn {
+      background: linear-gradient(135deg, #facc15 0%, #d97706 100%);
+      color: #422006;
+      box-shadow: 0 4px 12px rgba(217, 119, 6, 0.45);
+    }
+    .btn-buy-vip-plan.best-btn {
+      background: linear-gradient(135deg, #a855f7 0%, #7e22ce 100%);
+      color: #ffffff;
+      box-shadow: 0 4px 12px rgba(126, 34, 206, 0.45);
+    }
+    .vip-modal-footer-note {
+      text-align: center;
+      font-size: 0.7rem;
+      color: #94a3b8;
+      margin-top: 0.5rem;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Mobile View Screen Shell matching Home and Pass pages -->
+  <div class="mobile-container">
+
+    <!-- ======================================================================
+         1. TOP HEADER HUD (Back Button, Category Title, Coins, Stars, Tickets)
+         ====================================================================== -->
+    <header class="home-header">
+      <div class="header-user">
+        <button onclick="navigateBack()" aria-label="Return to previous page" class="user-avatar" style="cursor: pointer; border-color: rgba(56, 189, 248, 0.4); background: linear-gradient(135deg, #0e1e47 0%, #0b1530 100%); color: #38bdf8; transition: all 0.2s ease;" title="Back">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 12H5M12 19l-7-7 7-7"/>
+          </svg>
+        </button>
+        <div class="user-meta">
+          <span class="user-name" id="pageCategoryTitle">Coin Missions</span>
+          <span class="user-level" id="userRankDisplay">RANK #1</span>
+        </div>
+      </div>
+
+      <div class="header-pills">
+        <div class="coin-pill" id="coinPill" title="Total Coin Balance">
+          <span>🪙</span>
+          <span class="coin-value" id="hudCoins">0</span>
+        </div>
+        <div class="star-pill" id="starPill" title="Total Star Balance">
+          <span>⭐</span>
+          <span class="star-value" id="hudStars">0</span>
+        </div>
+        <div class="ticket-pill" id="ticketPill" title="Total Ticket Balance">
+          <span>🎟️</span>
+          <span class="ticket-value" id="hudTickets">0</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- ======================================================================
+         2. PAGE CONTENT (Hero Card, Category Switcher Tabs, Tasks List)
+         ====================================================================== -->
+    <main class="page-content">
+
+      <!-- Prominent Telegram Game Hero Balance Card (Hidden on Coin Task Page per user request) -->
+      <section class="tg-hero-card" id="tgHeroCard" style="display: none;">
+        <div class="tg-hero-icon-wrap" id="heroIconWrap">🪙</div>
+        <div class="tg-hero-balance-val game-outline" id="heroBalanceValue">0</div>
+        <div class="tg-hero-sub" id="heroSubtitle">
+          <span id="heroSubText">Total Coin Balance • Earn coins from missions</span>
+        </div>
+
+        <!-- Dynamic Progress Track (Daily Goal / Quota) -->
+        <div class="tg-hero-progress-wrap" id="heroProgressWrap">
+          <div class="tg-hero-progress-fill" id="heroProgressFill" style="width: 50%;"></div>
+          <div class="tg-hero-progress-text" id="heroProgressText">3 / 5 Tasks Completed</div>
+        </div>
+
+        <!-- Quick Booster Action Strip -->
+        <div class="tg-hero-action-strip" id="heroActionStrip">
+          <button type="button" class="btn-hero-action btn-action-gold" id="btnHeroAction1" onclick="handleHeroAction1()">
+            <span>🔥</span> <span id="heroAction1Label">Daily Bonus (+50 🪙)</span>
+          </button>
+          <button type="button" class="btn-hero-action btn-action-cyan" id="btnHeroAction2" onclick="handleHeroAction2()">
+            <span>🏆</span> <span id="heroAction2Label">Pass Road</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- Category Switcher Tabs (Removed per user request) -->
+      <div class="tg-tab-bar" id="categoryTabs" style="display: none !important;">
+        <button type="button" class="tg-tab-btn" id="tabCoin" onclick="switchCategory('coin')">🪙 Coins</button>
+        <button type="button" class="tg-tab-btn" id="tabCommon" onclick="switchCategory('common')">📋 Common</button>
+        <button type="button" class="tg-tab-btn" id="tabStar" onclick="switchCategory('star')">⭐ Star VIP</button>
+        <button type="button" class="tg-tab-btn" id="tabPro" onclick="switchCategory('pro')">💎 Pro Elite</button>
+        <button type="button" class="tg-tab-btn" id="tabUltra" onclick="switchCategory('ultra')">⚡ Ultra</button>
+      </div>
+
+      <!-- Category Banner (VIP Pass Status, Pro Pack Event Timer, etc.) -->
+      <div id="catBannerContainer"></div>
+
+      <!-- Interactive Tasks List Container -->
+      <div class="tasks-list" id="tasksList">
+        <!-- Dynamically populated by renderCategoryTasks() -->
+      </div>
+
+    </main>
+
+    <!-- ======================================================================
+         3. BOTTOM MENU BAR (Shop, Pass, Home, Wallet, Profile)
+         ====================================================================== -->
+    <nav class="below-menu-bar" id="belowMenuBar" aria-label="Bottom Navigation">
+      <a href="../shop/index.html" class="below-menu-item" id="menuShop" title="Shop">
+        <div class="menu-icon-wrap">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <path d="M16 10a4 4 0 0 1-8 0"></path>
+          </svg>
+        </div>
+        <span class="menu-label">Shop</span>
+      </a>
+
+      <a href="../leaderboard/index.html" class="below-menu-item" id="menuLeaderboard" title="500 Levels Battle Pass">
+        <div class="menu-icon-wrap">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path>
+            <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path>
+            <path d="M4 22h16"></path>
+            <path d="M10 14.66V17c0 .55-.45 1-1 1H7c-.55 0-1-.45-1-1v-2.34"></path>
+            <path d="M18 14.66V17c0 .55-.45 1-1 1h-2c-.55 0-1-.45-1-1v-2.34"></path>
+            <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"></path>
+          </svg>
+        </div>
+        <span class="menu-label">Pass</span>
+      </a>
+
+      <a href="../home/index.html" class="below-menu-item center-home-btn" id="menuHome" title="Home">
+        <div class="center-home-icon-wrap">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+            <polyline points="9 22 9 12 15 12 15 22"></polyline>
+          </svg>
+        </div>
+        <span class="menu-label">Home</span>
+      </a>
+
+      <a href="../wallet/index.html" class="below-menu-item" id="menuWallet" title="Wallet">
+        <div class="menu-icon-wrap">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"></path>
+            <path d="M3 5v14a2 2 0 0 0 2 2h16v-5"></path>
+            <path d="M18 12a2 2 0 0 0 0 4h4v-4Z"></path>
+          </svg>
+        </div>
+        <span class="menu-label">Wallet</span>
+      </a>
+
+      <a href="../profile/index.html" class="below-menu-item" id="menuProfile" title="Profile">
+        <div class="menu-icon-wrap">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path>
+            <circle cx="12" cy="7" r="4"></circle>
+          </svg>
+        </div>
+        <span class="menu-label">Profile</span>
+      </a>
+    </nav>
+
+    <!-- ======================================================================
+         4. TASK VERIFICATION MODAL
+         ====================================================================== -->
+    <div id="taskVerifyModalOverlay" class="modal-backdrop" style="display: none;" onclick="if(event.target===this) closeVerifyModal()">
+      <div class="reward-modal-card" onclick="event.stopPropagation()">
+        <div id="modalTaskEmoji" style="font-size: 3.2rem; margin-bottom: 0.35rem; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.6));">🎯</div>
+        <h3 id="verifyModalTitle" class="game-outline modal-reward-title">Verify Mission</h3>
+        <div id="verifyModalBountyPill" class="modal-track-badge" style="background: rgba(14, 165, 233, 0.2); border: 1px solid #38bdf8; color: #38bdf8;">+100 🪙 REWARD</div>
+        <p id="verifyModalDesc" class="modal-reward-desc">Complete the mission steps, then tap Claim to receive your reward.</p>
+
+        <div style="display: flex; gap: 8px;">
+          <button type="button" onclick="closeVerifyModal()" class="modal-btn-close">Cancel</button>
+          <button type="button" id="btnVerifyConfirm" onclick="submitVerification()" class="modal-btn-claim">Claim Reward 🎁</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ======================================================================
+         4B. QUIZ MODAL (INTERACTIVE TRIVIA)
+         ====================================================================== -->
+    <div id="quizModalOverlay" class="modal-backdrop" style="display: none;" onclick="if(event.target===this) closeQuizModal()">
+      <div class="reward-modal-card" style="border-color: rgba(52, 211, 153, 0.5); max-width: 360px;" onclick="event.stopPropagation()">
+        <div style="font-size: 3.2rem; margin-bottom: 0.35rem; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.6));">🧠</div>
+        <h3 id="quizModalTitle" class="game-outline modal-reward-title" style="color: #6ee7b7; font-size: 1.1rem; line-height: 1.35;">Quiz Trivia</h3>
+        <div id="quizModalBountyPill" class="modal-track-badge" style="background: rgba(16, 185, 129, 0.2); border: 1px solid #34d399; color: #6ee7b7; margin-bottom: 0.85rem;">🪙 +100 Coins • 🎟️ +25 Tickets</div>
+        
+        <p id="quizModalQuestion" style="font-size: 0.86rem; color: #f8fafc; font-weight: 700; line-height: 1.45; margin-bottom: 0.9rem; text-align: left; background: rgba(15, 23, 42, 0.65); padding: 0.75rem; border-radius: 10px; border: 1px solid rgba(52, 211, 153, 0.25);"></p>
+
+        <!-- 4 Options Container -->
+        <div id="quizOptionsContainer" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 0.85rem; width: 100%;"></div>
+
+        <div id="quizFeedbackMsg" style="font-size: 0.8rem; font-weight: 800; min-height: 1.2rem; margin-bottom: 0.5rem; text-align: center;"></div>
+
+        <button type="button" onclick="closeQuizModal()" class="modal-btn-close" style="width: 100%;">Close</button>
+      </div>
+    </div>
+
+  </div> <!-- End .mobile-container -->
+
+  <!-- ======================================================================
+       4C. VIP PREMIUM PASS MODAL (3 PLANS WITH DISCOUNT & LIMITS)
+       ====================================================================== -->
+  <div class="modal-backdrop vip-modal-overlay" id="vipSubscriptionModal" style="display: none;" onclick="if(event.target===this) closeSubscriptionModal()">
+    <div class="vip-modal-box" onclick="event.stopPropagation()">
+      <button type="button" class="vip-modal-close-btn" onclick="closeSubscriptionModal()" aria-label="Close modal">✕</button>
+
+      <div class="vip-modal-header">
+        <div class="vip-crown-badge">👑</div>
+        <h2 class="vip-modal-title">VIP Premium Pass</h2>
+        <p class="vip-modal-subtitle">Unlock exclusive high-reward Star Tasks &amp; claim huge star bounties!</p>
+        
+        <div class="vip-balance-strip">
+          <span>Your Balance:</span>
+          <span class="vip-balance-pill">⭐ <b id="vipModalUserStars">0</b> Stars</span>
+        </div>
+      </div>
+
+      <div class="vip-plans-grid">
+        
+        <!-- PLAN 1: 500 Stars for 15 Days (5 tasks / day) -->
+        <div class="vip-plan-card" id="plan15Days">
+          <div class="plan-discount-badge starter-badge">STARTER PASS • LEVEL 1 &amp; 2 • 5 TASKS/DAY</div>
+          <div class="plan-card-body">
+            <div class="plan-duration-badge">15 DAYS</div>
+            <div class="plan-price-row">
+              <span class="plan-price-stars">500</span>
+              <span class="plan-price-unit">⭐ Stars</span>
+            </div>
+            <div class="plan-rate-sub">~33 ⭐ / day</div>
+            <div class="plan-task-limit-pill starter-pill">⚡ 5 Tasks / Day Limit • Level 1-2</div>
+            <ul class="plan-features-list">
+              <li>✓ Unlocks Level 1 &amp; Level 2 Star Tasks</li>
+              <li>✓ Complete up to 5 Star Tasks per day</li>
+              <li>✓ 15 Days full VIP task clearance</li>
+              <li>✓ Instant 6-digit verification</li>
+            </ul>
+            <button type="button" class="btn-buy-vip-plan" onclick="purchaseVipPlan('15days')">
+              Activate for 500 ⭐ (Level 1 &amp; 2)
+            </button>
+          </div>
+        </div>
+
+        <!-- PLAN 2: 1000 Stars for 30 Days (15% OFF, 10 tasks / day) -->
+        <div class="vip-plan-card popular-plan" id="plan30Days">
+          <div class="plan-discount-badge popular-badge">🔥 POPULAR • LEVEL 1-4 • 10 TASKS/DAY</div>
+          <div class="plan-card-body">
+            <div class="plan-duration-badge">30 DAYS (1 MONTH)</div>
+            <div class="plan-price-row">
+              <span class="plan-price-stars">1,000</span>
+              <span class="plan-price-unit">⭐ Stars</span>
+            </div>
+            <div class="plan-rate-sub">Full month VIP access</div>
+            <div class="plan-task-limit-pill popular-pill">⚡ 10 Tasks/Day • 20 Shop Buy Limit</div>
+            <ul class="plan-features-list">
+              <li>✓ Unlocks Level 1, 2, 3 &amp; Level 4 Star Tasks</li>
+              <li>✓ Upgrades Shop Buy Limit to 20 / Day</li>
+              <li>✓ Complete up to 10 Star Tasks per day</li>
+              <li>✓ Priority task updates &amp; support</li>
+            </ul>
+            <button type="button" class="btn-buy-vip-plan popular-btn" onclick="purchaseVipPlan('30days')">
+              Activate for 1,000 ⭐ (Level 1-4)
+            </button>
+          </div>
+        </div>
+
+        <!-- PLAN 3: 5000 Stars for 3 Months (All Levels 1-5 Unlocked, 20 tasks / day) -->
+        <div class="vip-plan-card best-value-plan" id="plan90Days">
+          <div class="plan-discount-badge best-badge">⚡ ULTIMATE PASS • ALL LEVELS 1-5 • 20 TASKS/DAY</div>
+          <div class="plan-card-body">
+            <div class="plan-duration-badge">3 MONTHS (90 DAYS)</div>
+            <div class="plan-price-row">
+              <span class="plan-price-stars">5,000</span>
+              <span class="plan-price-unit">⭐ Stars</span>
+            </div>
+            <div class="plan-rate-sub">Full 3-Month Ultimate VIP clearance</div>
+            <div class="plan-task-limit-pill best-pill">⚡ Level 5 Unlocked • 20 Tasks/Day</div>
+            <ul class="plan-features-list">
+              <li>✓ Unlocks All Levels: Level 1, 2, 3, 4 &amp; Level 5</li>
+              <li>✓ Upgrades Shop Buy Limit to 20 / Day</li>
+              <li>✓ Complete up to 20 Star Tasks per day</li>
+              <li>✓ 90 Days (3 Months) Ultimate clearance</li>
+            </ul>
+            <button type="button" class="btn-buy-vip-plan best-btn" onclick="purchaseVipPlan('90days')">
+              Activate for 5,000 ⭐ (Level 5 Unlocked)
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="vip-modal-footer-note">
+        <span>Common &amp; Coin Tasks remain 100% free with no subscription required.</span>
+      </div>
+
+    </div>
+  </div>
+
+    <!-- ======================================================================
+         5. REWARDED AD MODAL (+5 Star Tasks)
+         ====================================================================== -->
+    <div id="rewardedAdModalOverlay" class="modal-backdrop" style="display: none;" onclick="if(event.target===this) closeAdModal()">
+      <div class="reward-modal-card" onclick="event.stopPropagation()">
+        <div style="font-size: 3.2rem; margin-bottom: 0.35rem;">📺</div>
+        <h3 class="game-outline modal-reward-title" style="color: #fde047;">Sponsored Video</h3>
+        <div class="modal-track-badge" style="background: rgba(250, 204, 21, 0.2); border: 1px solid #facc15; color: #fde047;">+5 EXTRA STAR TASKS</div>
+        <p class="modal-reward-desc">Watch this short rewarded sponsor ad to unlock <b>+5 Extra Star Tasks</b> today!</p>
+
+        <div style="background: rgba(3, 8, 22, 0.85); border: 1.5px solid rgba(56, 189, 248, 0.3); border-radius: 12px; height: 16px; overflow: hidden; margin-bottom: 0.85rem;">
+          <div id="adProgressFill" style="height: 100%; width: 0%; background: linear-gradient(90deg, #facc15, #f59e0b); transition: width 1s linear;"></div>
+        </div>
+
+        <div style="font-size: 0.8rem; color: #cbd5e1; font-weight: 800; margin-bottom: 1.15rem;">
+          Time Remaining: <span id="adCountdownSeconds" style="color: #fde047;">5</span>s
+        </div>
+
+        <button type="button" id="btnClaimAdReward" onclick="finishRewardedAd()" disabled style="width: 100%; padding: 0.65rem; border-radius: 12px; font-weight: 900; font-size: 0.82rem; background: rgba(250, 204, 21, 0.25); color: #94a3b8; border: 1px solid rgba(250, 204, 21, 0.4); cursor: not-allowed;">⏳ Watching Ad...</button>
+      </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="arcadeToast" class="arcade-toast-pill">
+      <span id="toastMsg">Notification</span>
+    </div>
+
+  </div> <!-- End .mobile-container -->
+
+  <!-- ======================================================================
+       6. JAVASCRIPT: TELEGRAM GAME ENGINE & REAL-TIME DATA
+       ====================================================================== -->
+  <script>
+    // Ensure all balance keys exist without wiping earned balances
+    try {
+      if (localStorage.getItem('task_game_coins') === null) localStorage.setItem('task_game_coins', '0');
+      if (localStorage.getItem('user_coins') === null) localStorage.setItem('user_coins', '0');
+      if (localStorage.getItem('task_game_coins_alt') === null) localStorage.setItem('task_game_coins_alt', '0');
+      if (localStorage.getItem('task_game_stars') === null) localStorage.setItem('task_game_stars', '0');
+      if (localStorage.getItem('user_stars') === null) localStorage.setItem('user_stars', '0');
+      if (localStorage.getItem('task_user_tickets') === null) localStorage.setItem('task_user_tickets', '0');
+      if (localStorage.getItem('user_tickets') === null) localStorage.setItem('user_tickets', '0');
+      if (localStorage.getItem('task_game_tickets') === null) localStorage.setItem('task_game_tickets', '0');
+    } catch(e) {}
+
+    const state = {
+      coins: parseInt(localStorage.getItem("task_game_coins") || localStorage.getItem("user_coins") || "0", 10),
+      stars: parseInt(localStorage.getItem("task_game_stars") || localStorage.getItem("user_stars") || "0", 10),
+      tickets: parseInt(localStorage.getItem("task_user_tickets") || localStorage.getItem("user_tickets") || localStorage.getItem("task_game_tickets") || "0", 10),
+      currentLevel: parseInt(localStorage.getItem("task_pass_level") || "1", 10),
+      completedTasksCount: parseInt(localStorage.getItem("task_pass_total_completed") || localStorage.getItem("task_game_total_tasks_completed") || "0", 10),
+      activeTab: "coin"
+    };
+    window.state = state;
+
+    // Determine category from URL param (?cat=coin, star, pro, task) or localStorage
+    const urlParams = new URLSearchParams(window.location.search);
+    let initialCat = (urlParams.get("cat") || localStorage.getItem("task_active_tab") || "coin").toLowerCase();
+    if (initialCat === "simple") initialCat = "coin";
+    if (initialCat === "premium") initialCat = "star";
+    if (initialCat === "all" || initialCat === "task") initialCat = "common";
+    if (!["coin", "common", "task", "star", "pro", "ultra", "quiz"].includes(initialCat)) initialCat = "coin";
+    state.activeTab = initialCat;
+
+    // Default missions fallback - Demo tasks removed per user request
+    const DEFAULT_TASKS = [];
+
+    // -------------------------------------------------------------------------
+    // COMMON TASKS UNLOCK & RENEW SYSTEM (10 INITIAL, +10 ON AD RENEW)
+    // -------------------------------------------------------------------------
+    function getCommonTasksUnlockedLimit() {
+      let limit = parseInt(localStorage.getItem("common_tasks_unlocked_limit") || "10", 10);
+      if (isNaN(limit) || limit < 10) limit = 10;
+      return limit;
+    }
+
+    const CANONICAL_COMMON_TASKS = [
+      { id: 'comm_mission_1', title: 'Follow Official Twitter / X', description: 'Follow our official announcement channel on X', rewardTickets: 50, category: 'common', url: 'https://twitter.com' },
+      { id: 'comm_mission_2', title: 'Join Telegram Community Group', description: 'Join the community group & say hello to fellow earners', rewardTickets: 50, category: 'common', url: 'https://t.me' },
+      { id: 'comm_mission_3', title: 'Subscribe to YouTube Channel', description: 'Watch intro video and subscribe for updates', rewardTickets: 50, category: 'common', url: 'https://youtube.com' },
+      { id: 'comm_mission_4', title: 'Like & Retweet Pinned Post', description: 'Share the latest prize drop post with friends', rewardTickets: 50, category: 'common', url: 'https://twitter.com' },
+      { id: 'comm_mission_5', title: 'Daily Community Check-In', description: 'Claim your daily attendance bounty ticket', rewardTickets: 50, category: 'common', url: 'https://google.com' },
+      { id: 'comm_mission_6', title: 'Explore Sponsor Partner Portal', description: 'Visit our premier partner page and explore features', rewardTickets: 50, category: 'common', url: 'https://uplcm.com/4/12169313' },
+      { id: 'comm_mission_7', title: 'Share Referral Link with Friends', description: 'Invite a friend to join the task arcade network', rewardTickets: 50, category: 'common', url: 'https://google.com' },
+      { id: 'comm_mission_8', title: 'Read Platform Beginner Guide', description: 'Learn how to maximize your coins and ticket earnings', rewardTickets: 50, category: 'common', url: 'https://google.com' },
+      { id: 'comm_mission_9', title: 'Join Discord Discussion Hub', description: 'Participate in active voice & text community chats', rewardTickets: 50, category: 'common', url: 'https://discord.com' },
+      { id: 'comm_mission_10', title: 'Complete Quick Arcade Rating', description: 'Rate your today gaming experience on the portal', rewardTickets: 50, category: 'common', url: 'https://google.com' },
+      { id: 'comm_mission_11', title: 'Follow Instagram Official Page', description: 'Check out new reward announcements and community memes', rewardTickets: 50, category: 'common', url: 'https://instagram.com' },
+      { id: 'comm_mission_12', title: 'Rate 5 Stars on Webstore', description: 'Leave positive feedback to help boost community reach', rewardTickets: 50, category: 'common', url: 'https://google.com' },
+      { id: 'comm_mission_13', title: 'Read Web3 Security Tips', description: 'Learn best practices for account & wallet safety', rewardTickets: 50, category: 'common', url: 'https://google.com' },
+      { id: 'comm_mission_14', title: 'Join Reddit Subreddit Hub', description: 'Upvote weekly community threads on Reddit', rewardTickets: 50, category: 'common', url: 'https://reddit.com' },
+      { id: 'comm_mission_15', title: 'Watch Video Tutorial', description: 'Watch the step-by-step Task Pass claiming guide', rewardTickets: 50, category: 'common', url: 'https://youtube.com' },
+      { id: 'comm_mission_16', title: 'Pin Announcement Channel', description: 'Keep the official channel pinned at top of your chats', rewardTickets: 50, category: 'common', url: 'https://t.me' },
+      { id: 'comm_mission_17', title: 'Quote Tweet Winner Showcase', description: 'Quote tweet the weekly prize leaderboard winner list', rewardTickets: 50, category: 'common', url: 'https://twitter.com' },
+      { id: 'comm_mission_18', title: 'Submit Arcade Feedback Form', description: 'Tell the developers what features you want next', rewardTickets: 50, category: 'common', url: 'https://google.com' },
+      { id: 'comm_mission_19', title: 'Visit Partner Store Sponsor', description: 'Check out sponsored discounts and redeem codes', rewardTickets: 50, category: 'common', url: 'https://uplcm.com/4/12169338' },
+      { id: 'comm_mission_20', title: 'Weekly Community Roll Call', description: 'Confirm your ticket balance before weekly raffle', rewardTickets: 50, category: 'common', url: 'https://google.com' },
+      { id: 'comm_mission_21', title: 'Join Facebook Fan Club', description: 'Connect with global arcade players and fans', rewardTickets: 50, category: 'common', url: 'https://facebook.com' },
+      { id: 'comm_mission_22', title: 'Verify Notification Alert Settings', description: 'Turn on task alert notifications for instant drops', rewardTickets: 50, category: 'common', url: 'https://google.com' },
+      { id: 'comm_mission_23', title: 'Check Daily Star Conversion Rates', description: 'Review star exchange shop and coin packages', rewardTickets: 50, category: 'common', url: 'https://google.com' },
+      { id: 'comm_mission_24', title: 'Bookmark Tasks Dashboard', description: 'Add task arcade to your mobile home screen or bookmarks', rewardTickets: 50, category: 'common', url: 'https://google.com' },
+      { id: 'comm_mission_25', title: 'Retweet Community Milestone', description: 'Celebrate reaching active player milestones', rewardTickets: 50, category: 'common', url: 'https://twitter.com' },
+      { id: 'comm_mission_26', title: 'Visit Sponsor Special Offer', description: 'Browse today exclusive sponsor campaign', rewardTickets: 50, category: 'common', url: 'https://uplcm.com/4/12169321' },
+      { id: 'comm_mission_27', title: 'Review Task Pass Milestone Prizes', description: 'Check out the 500-level Task Pass reward tier list', rewardTickets: 50, category: 'common', url: 'https://google.com' },
+      { id: 'comm_mission_28', title: 'Share Game Screenshot in Discord', description: 'Post your leaderboard position in the showcase channel', rewardTickets: 50, category: 'common', url: 'https://discord.com' },
+      { id: 'comm_mission_29', title: 'Vote in Community Poll', description: 'Cast your vote for next month event theme', rewardTickets: 50, category: 'common', url: 'https://t.me' },
+      { id: 'comm_mission_30', title: 'Verify Account Security Setup', description: 'Check that your wallet and recovery details are saved', rewardTickets: 50, category: 'common', url: 'https://google.com' }
+    ];
+
+    function getCommonTasksPool() {
+      const limit = getCommonTasksUnlockedLimit();
+      let userAdminTasks = [];
+      try {
+        const raw = localStorage.getItem("task_game_tasks") || localStorage.getItem("admin_tasks");
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            userAdminTasks = parsed.filter(t => t && (t.category === 'common' || t.category === 'task'));
+          }
+        }
+      } catch(e) {}
+
+      const existingIds = new Set(userAdminTasks.map(t => t.id));
+      const needed = Math.max(0, limit - userAdminTasks.length);
+      const canonicalSlice = CANONICAL_COMMON_TASKS.filter(t => !existingIds.has(t.id)).slice(0, needed);
+      return [...userAdminTasks, ...canonicalSlice].slice(0, limit);
+    }
+
+    window.renewCommonTasksWithAd = function() {
+      // 1. Open direct sponsor ad link in new tab per user request
+      try {
+        if (typeof openSponsorAdLink === "function") {
+          openSponsorAdLink(Date.now());
+        } else if (typeof window.openSponsorAdLink === "function") {
+          window.openSponsorAdLink(Date.now());
+        } else {
+          window.open("https://uplcm.com/4/12169313", "_blank");
+        }
+      } catch(e) {
+        try { window.open("https://uplcm.com/4/12169313", "_blank"); } catch(e2) {}
+      }
+
+      // 2. Increase unlock limit by +10
+      let currentLimit = getCommonTasksUnlockedLimit();
+      currentLimit += 10;
+      localStorage.setItem("common_tasks_unlocked_limit", currentLimit.toString());
+
+      // Update badge directly in DOM
+      const commonBadge = document.getElementById("commonUnlockedCount");
+      if (commonBadge) commonBadge.textContent = `${currentLimit}/${currentLimit} Unlocked Today`;
+
+      try {
+        const bSync = new BroadcastChannel("task_arcade_sync");
+        bSync.postMessage({ type: "COMMON_TASKS_RENEWED", limit: currentLimit });
+        bSync.close();
+      } catch(e) {}
+
+      showToast("🎉 +10 More Common Tasks Unlocked & Renewed!");
+      renderCategoryTasks();
+    };
+
+    // -------------------------------------------------------------------------
+    // COIN TASKS SYSTEM (LIMIT = 8, FREE ENTRY, +8 ON AD RENEW)
+    // -------------------------------------------------------------------------
+    function getCoinTasksUnlockedLimit() {
+      let limit = parseInt(localStorage.getItem("coin_tasks_unlocked_limit") || "8", 10);
+      if (isNaN(limit) || limit < 8) limit = 8;
+      return limit;
+    }
+
+    const CANONICAL_COIN_TASKS = [
+      { id: 'coin_mission_1', title: 'Visit Crypto Market Tracker', description: 'Explore live trading prices and volume charts', rewardCoins: 150, rewardTickets: 0, ticketCost: 100, category: 'coin', url: 'https://coinmarketcap.com' },
+      { id: 'coin_mission_2', title: 'Follow Web3 Builders Hub', description: 'Follow developer announcements on X', rewardCoins: 150, rewardTickets: 0, ticketCost: 100, category: 'coin', url: 'https://twitter.com' },
+      { id: 'coin_mission_3', title: 'Watch Crypto Wallet Tutorial', description: 'Learn how to set up self-custody wallet safely', rewardCoins: 150, rewardTickets: 0, ticketCost: 100, category: 'coin', url: 'https://youtube.com' },
+      { id: 'coin_mission_4', title: 'Join Crypto News Discussion', description: 'Discuss today top crypto headlines on Telegram', rewardCoins: 150, rewardTickets: 0, ticketCost: 100, category: 'coin', url: 'https://t.me' },
+      { id: 'coin_mission_5', title: 'Check Today Gas Price Index', description: 'View Ethereum and Solana average transaction fees', rewardCoins: 150, rewardTickets: 0, ticketCost: 100, category: 'coin', url: 'https://etherscan.io' },
+      { id: 'coin_mission_6', title: 'Explore Sponsor Special Partner', description: 'Visit featured sponsor portal for bonus perks', rewardCoins: 150, rewardTickets: 0, ticketCost: 100, category: 'coin', url: 'https://uplcm.com/4/12169313' },
+      { id: 'coin_mission_7', title: 'Read Layer-2 Scaling Explainer', description: 'Learn about rollups and zero-knowledge tech', rewardCoins: 150, rewardTickets: 0, ticketCost: 100, category: 'coin', url: 'https://google.com' },
+      { id: 'coin_mission_8', title: 'Daily Coin Arcade Check-in', description: 'Verify attendance and collect daily coin drop', rewardCoins: 150, rewardTickets: 0, ticketCost: 100, category: 'coin', url: 'https://google.com' },
+      { id: 'coin_mission_9', title: 'Browse NFT Marketplace Trends', description: 'Inspect top digital asset collections today', rewardCoins: 150, rewardTickets: 0, ticketCost: 100, category: 'coin', url: 'https://opensea.io' },
+      { id: 'coin_mission_10', title: 'Check Decentralized Exchange Swaps', description: 'Learn how automated market makers function', rewardCoins: 150, rewardTickets: 0, ticketCost: 100, category: 'coin', url: 'https://uniswap.org' },
+      { id: 'coin_mission_11', title: 'Subscribe to Crypto Podcast', description: 'Listen to weekly blockchain founder interviews', rewardCoins: 150, rewardTickets: 0, ticketCost: 100, category: 'coin', url: 'https://youtube.com' },
+      { id: 'coin_mission_12', title: 'Review Hardware Wallet Safety', description: 'Compare top cold storage security solutions', rewardCoins: 150, rewardTickets: 0, ticketCost: 100, category: 'coin', url: 'https://google.com' },
+      { id: 'coin_mission_13', title: 'Follow Discord Alpha Alerts', description: 'Join daily crypto discussion and news alerts', rewardCoins: 150, rewardTickets: 0, ticketCost: 100, category: 'coin', url: 'https://discord.com' },
+      { id: 'coin_mission_14', title: 'Visit Partner Offer Campaign', description: 'Browse today exclusive sponsor campaign', rewardCoins: 150, rewardTickets: 0, ticketCost: 100, category: 'coin', url: 'https://uplcm.com/4/12169338' },
+      { id: 'coin_mission_15', title: 'Read Smart Contract Audit Guide', description: 'Learn how smart contract security reviews work', rewardCoins: 150, rewardTickets: 0, ticketCost: 100, category: 'coin', url: 'https://google.com' },
+      { id: 'coin_mission_16', title: 'Check Staking Yield Calculator', description: 'Calculate annualized rewards on proof-of-stake', rewardCoins: 150, rewardTickets: 0, ticketCost: 100, category: 'coin', url: 'https://google.com' },
+      { id: 'coin_mission_17', title: 'Vote in Community Token Poll', description: 'Vote for community asset listing on Telegram', rewardCoins: 150, rewardTickets: 0, ticketCost: 100, category: 'coin', url: 'https://t.me' },
+      { id: 'coin_mission_18', title: 'Inspect Blockchain Explorer Block', description: 'View latest confirmed transactions on block explorer', rewardCoins: 150, rewardTickets: 0, ticketCost: 100, category: 'coin', url: 'https://blockchain.com' },
+      { id: 'coin_mission_19', title: 'Read Stablecoins 101 Primer', description: 'Understand fiat-backed vs algorithmic stablecoins', rewardCoins: 150, rewardTickets: 0, ticketCost: 100, category: 'coin', url: 'https://google.com' },
+      { id: 'coin_mission_20', title: 'Visit Sponsor Partner Portal', description: 'Explore partner portal features and special deals', rewardCoins: 150, rewardTickets: 0, ticketCost: 100, category: 'coin', url: 'https://uplcm.com/4/12169321' },
+      { id: 'coin_mission_21', title: 'Check Cross-Chain Bridge Guide', description: 'Learn how cross-chain asset bridging functions', rewardCoins: 150, rewardTickets: 0, ticketCost: 100, category: 'coin', url: 'https://google.com' },
+      { id: 'coin_mission_22', title: 'Join Web3 Forum Discussions', description: 'Engage with crypto community members worldwide', rewardCoins: 150, rewardTickets: 0, ticketCost: 100, category: 'coin', url: 'https://reddit.com' },
+      { id: 'coin_mission_23', title: 'Bookmark Coin Missions Page', description: 'Save this page to your mobile home screen', rewardCoins: 150, rewardTickets: 0, ticketCost: 100, category: 'coin', url: 'https://google.com' },
+      { id: 'coin_mission_24', title: 'Daily Nightly Coin Roll Call', description: 'Complete your nightly quest checklist', rewardCoins: 150, rewardTickets: 0, ticketCost: 100, category: 'coin', url: 'https://google.com' }
+    ];
+
+    function getCoinTasksPool() {
+      const limit = getCoinTasksUnlockedLimit();
+      let userAdminTasks = [];
+      try {
+        const raw = localStorage.getItem("task_game_tasks") || localStorage.getItem("admin_tasks");
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            userAdminTasks = parsed.filter(t => t && (t.category === 'simple' || t.category === 'coin'));
+          }
+        }
+      } catch(e) {}
+
+      const existingIds = new Set(userAdminTasks.map(t => t.id));
+      const needed = Math.max(0, limit - userAdminTasks.length);
+      const canonicalSlice = CANONICAL_COIN_TASKS.filter(t => !existingIds.has(t.id)).slice(0, needed);
+      return [...userAdminTasks, ...canonicalSlice].slice(0, limit);
+    }
+
+    window.renewCoinTasksWithAd = function() {
+      try {
+        if (typeof openSponsorAdLink === "function") {
+          openSponsorAdLink(Date.now());
+        } else if (typeof window.openSponsorAdLink === "function") {
+          window.openSponsorAdLink(Date.now());
+        } else {
+          window.open("https://uplcm.com/4/12169313", "_blank");
+        }
+      } catch(e) {
+        try { window.open("https://uplcm.com/4/12169313", "_blank"); } catch(e2) {}
+      }
+
+      let currentLimit = getCoinTasksUnlockedLimit();
+      currentLimit += 8;
+      localStorage.setItem("coin_tasks_unlocked_limit", currentLimit.toString());
+
+      // Update badge directly in DOM
+      const coinBadge = document.getElementById("coinUnlockedCount");
+      if (coinBadge) coinBadge.textContent = `${currentLimit}/${currentLimit} Unlocked Today`;
+
+      try {
+        const bSync = new BroadcastChannel("task_arcade_sync");
+        bSync.postMessage({ type: "COIN_TASKS_RENEWED", limit: currentLimit });
+        bSync.close();
+      } catch(e) {}
+
+      showToast("🎉 +8 More Coin Tasks Unlocked & Renewed!");
+      renderCategoryTasks();
+    };
+
+    // -------------------------------------------------------------------------
+    // STAR TASKS (VIP PREMIUM) SYSTEM (LIMIT & AD RENEWAL & MODAL)
+    // -------------------------------------------------------------------------
+    function getStarTasksUnlockedLimit() {
+      const plan = localStorage.getItem("task_vip_pass_plan") || "";
+      let baseLimit = 5;
+      if (plan === "30days") baseLimit = 10;
+      else if (plan === "90days") baseLimit = 20;
+      
+      const extraRenews = parseInt(localStorage.getItem("star_tasks_renew_count") || "0", 10);
+      return baseLimit + extraRenews * 5;
+    }
+
+    const CANONICAL_STAR_TASKS = [
+      { id: 'star_mission_1', title: 'VIP Mission 1: Sponsor Alpha Review', description: 'Exclusive VIP sponsor mission • High star yield', rewardStars: 10, rewardCoins: 200, category: 'star', url: 'https://uplcm.com/4/12169313' },
+      { id: 'star_mission_2', title: 'VIP Mission 2: Partner Portal Test', description: 'Verify partner features and claim VIP bounty', rewardStars: 10, rewardCoins: 250, category: 'star', url: 'https://uplcm.com/4/12169338' },
+      { id: 'star_mission_3', title: 'VIP Mission 3: Premium Video Watch', description: 'Watch partner video for top tier Star reward', rewardStars: 15, rewardCoins: 300, category: 'star', url: 'https://youtube.com' },
+      { id: 'star_mission_4', title: 'VIP Mission 4: Join VIP Telegram Lounge', description: 'Access private telegram community for VIP earners', rewardStars: 15, rewardCoins: 350, category: 'star', url: 'https://t.me' },
+      { id: 'star_mission_5', title: 'VIP Mission 5: Exclusive Partner Quest', description: 'Complete high-tier sponsor challenge', rewardStars: 20, rewardCoins: 400, category: 'star', url: 'https://uplcm.com/4/12169321' },
+      { id: 'star_mission_6', title: 'VIP Mission 6: Star Bounty Claim', description: 'Claim daily VIP exclusive attendance bounty', rewardStars: 20, rewardCoins: 450, category: 'star', url: 'https://google.com' },
+      { id: 'star_mission_7', title: 'VIP Mission 7: Premium Feedback Review', description: 'Submit priority arcade review for maximum Stars', rewardStars: 25, rewardCoins: 500, category: 'star', url: 'https://google.com' },
+      { id: 'star_mission_8', title: 'VIP Mission 8: Sponsor Prime Access', description: 'Explore prime partner offerings & perks', rewardStars: 25, rewardCoins: 500, category: 'star', url: 'https://uplcm.com/4/12169324' },
+      { id: 'star_mission_9', title: 'VIP Mission 9: Community Star Spotlight', description: 'Share leaderboard showcase with VIP peers', rewardStars: 25, rewardCoins: 500, category: 'star', url: 'https://discord.com' },
+      { id: 'star_mission_10', title: 'VIP Mission 10: Elite Milestone Quest', description: 'Complete final daily VIP mission for apex rewards', rewardStars: 30, rewardCoins: 600, category: 'star', url: 'https://google.com' },
+      { id: 'star_mission_11', title: 'VIP Mission 11: Extra Star Surge I', description: 'Renewed VIP task • Instant Stars to balance', rewardStars: 15, rewardCoins: 300, category: 'star', url: 'https://uplcm.com/4/12169336' },
+      { id: 'star_mission_12', title: 'VIP Mission 12: Extra Star Surge II', description: 'Renewed VIP task • Instant Stars to balance', rewardStars: 15, rewardCoins: 300, category: 'star', url: 'https://uplcm.com/4/11834220' },
+      { id: 'star_mission_13', title: 'VIP Mission 13: Extra Star Surge III', description: 'Renewed VIP task • Instant Stars to balance', rewardStars: 20, rewardCoins: 350, category: 'star', url: 'https://uplcm.com/4/12169323' },
+      { id: 'star_mission_14', title: 'VIP Mission 14: Extra Star Surge IV', description: 'Renewed VIP task • Instant Stars to balance', rewardStars: 20, rewardCoins: 400, category: 'star', url: 'https://uplcm.com/4/11616083' },
+      { id: 'star_mission_15', title: 'VIP Mission 15: Extra Star Surge V', description: 'Renewed VIP task • Apex reward drop', rewardStars: 25, rewardCoins: 500, category: 'star', url: 'https://uplcm.com/4/12169326' }
+    ];
+
+    function getStarTasksPool() {
+      const limit = getStarTasksUnlockedLimit();
+      let userAdminTasks = [];
+      try {
+        const raw = localStorage.getItem("task_game_tasks") || localStorage.getItem("admin_tasks");
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            userAdminTasks = parsed.filter(t => t && (t.category === 'premium' || t.category === 'star'));
+          }
+        }
+      } catch(e) {}
+
+      const existingIds = new Set(userAdminTasks.map(t => t.id));
+      const needed = Math.max(0, limit - userAdminTasks.length);
+      const canonicalSlice = CANONICAL_STAR_TASKS.filter(t => !existingIds.has(t.id)).slice(0, needed);
+      return [...userAdminTasks, ...canonicalSlice].slice(0, limit);
+    }
+
+    window.renewStarTasksWithAd = function() {
+      try {
+        if (typeof openSponsorAdLink === "function") {
+          openSponsorAdLink(Date.now());
+        } else if (typeof window.openSponsorAdLink === "function") {
+          window.openSponsorAdLink(Date.now());
+        } else {
+          window.open("https://uplcm.com/4/12169313", "_blank");
+        }
+      } catch(e) {
+        try { window.open("https://uplcm.com/4/12169313", "_blank"); } catch(e2) {}
+      }
+
+      let count = parseInt(localStorage.getItem("star_tasks_renew_count") || "0", 10);
+      count += 1;
+      localStorage.setItem("star_tasks_renew_count", count.toString());
+
+      const newLimit = getStarTasksUnlockedLimit();
+      const starBadge = document.getElementById("starUnlockedCount");
+      if (starBadge) starBadge.textContent = `${newLimit}/${newLimit} VIP Tasks`;
+
+      try {
+        const bSync = new BroadcastChannel("task_arcade_sync");
+        bSync.postMessage({ type: "STAR_TASKS_RENEWED", limit: newLimit });
+        bSync.close();
+      } catch(e) {}
+
+      showToast("🎉 +5 More Star Tasks Unlocked & Renewed!");
+      renderCategoryTasks();
+    };
+
+    window.openVipSubscriptionModal = function() {
+      const modal = document.getElementById("vipSubscriptionModal");
+      const userStarsEl = document.getElementById("vipModalUserStars");
+      const s = parseInt(localStorage.getItem("task_game_stars") || localStorage.getItem("user_stars") || "0", 10);
+      if (userStarsEl) userStarsEl.textContent = s.toLocaleString();
+      if (modal) {
+        modal.classList.add("active");
+        modal.style.setProperty("display", "flex", "important");
+      }
+    };
+
+    window.closeSubscriptionModal = function() {
+      const modal = document.getElementById("vipSubscriptionModal");
+      if (modal) {
+        modal.classList.remove("active");
+        modal.style.setProperty("display", "none", "important");
+      }
+    };
+
+    window.purchaseVipPlan = function(planKey) {
+      let cost = 500;
+      let durationDays = 15;
+      if (planKey === "30days") { cost = 1000; durationDays = 30; }
+      else if (planKey === "90days") { cost = 5000; durationDays = 90; }
+
+      let currentStars = parseInt(localStorage.getItem("task_game_stars") || localStorage.getItem("user_stars") || "0", 10);
+      if (currentStars < cost) {
+        showToast("❌ Insufficient Stars! You need " + cost + " ⭐ to activate this VIP Plan.");
+        return;
+      }
+
+      currentStars -= cost;
+      localStorage.setItem("task_game_stars", currentStars.toString());
+      localStorage.setItem("user_stars", currentStars.toString());
+      localStorage.setItem("task_vip_pass_active", "true");
+      localStorage.setItem("task_vip_pass_plan", planKey);
+      localStorage.setItem("task_vip_pass_expiry", (Date.now() + durationDays * 86400000).toString());
+
+      closeSubscriptionModal();
+      showToast("🎉 VIP Pass Activated! Exclusive Star Tasks Unlocked!");
+      updateHUD();
+      renderCategoryTasks();
+    };
+
+    // -------------------------------------------------------------------------
+    // QUIZ TASKS SYSTEM (10 TRIVIA QUESTIONS)
+    // -------------------------------------------------------------------------
+    const CANONICAL_QUIZ_TASKS = [
+      {
+        id: "quiz_q1",
+        title: "Quiz 1: Ethereum Native Crypto",
+        question: "What is the native cryptocurrency of the Ethereum network?",
+        options: ["Bitcoin (BTC)", "Ether (ETH)", "Solana (SOL)", "Dogecoin (DOGE)"],
+        correctIndex: 1,
+        category: "quiz",
+        rewardCoins: 100,
+        rewardTickets: 25
+      },
+      {
+        id: "quiz_q2",
+        title: "Quiz 2: Bitcoin Consensus Mechanism",
+        question: "Which consensus mechanism does Bitcoin use to secure transactions?",
+        options: ["Proof of Stake", "Proof of Authority", "Proof of Work", "Proof of History"],
+        correctIndex: 2,
+        category: "quiz",
+        rewardCoins: 100,
+        rewardTickets: 25
+      },
+      {
+        id: "quiz_q3",
+        title: "Quiz 3: Maximum Supply of Bitcoin",
+        question: "What is the maximum supply limit of Bitcoin?",
+        options: ["100 Million", "21 Million", "Infinite", "50 Million"],
+        correctIndex: 1,
+        category: "quiz",
+        rewardCoins: 100,
+        rewardTickets: 25
+      },
+      {
+        id: "quiz_q4",
+        title: "Quiz 4: Meaning of 'DeFi'",
+        question: "What does 'DeFi' stand for in Web3 terminology?",
+        options: ["Decentralized Finance", "Definitive Fiber", "Digital Federation", "Derivative Fidelity"],
+        correctIndex: 0,
+        category: "quiz",
+        rewardCoins: 100,
+        rewardTickets: 25
+      },
+      {
+        id: "quiz_q5",
+        title: "Quiz 5: Independent Layer-1 Blockchain",
+        question: "Which of the following is considered an independent Layer-1 blockchain?",
+        options: ["Polygon (Matic)", "Arbitrum", "Solana", "Optimism"],
+        correctIndex: 2,
+        category: "quiz",
+        rewardCoins: 100,
+        rewardTickets: 25
+      },
+      {
+        id: "quiz_q6",
+        title: "Quiz 6: Meaning of 'NFT'",
+        question: "What does 'NFT' stand for in digital tokenized assets?",
+        options: ["New File Type", "Non-Fungible Token", "Network Financial Transfer", "Non-Formal Transfer"],
+        correctIndex: 1,
+        category: "quiz",
+        rewardCoins: 100,
+        rewardTickets: 25
+      },
+      {
+        id: "quiz_q7",
+        title: "Quiz 7: Smallest Unit of Bitcoin",
+        question: "What is the smallest unit of Bitcoin called?",
+        options: ["Gwei", "Satoshi", "Finney", "Microcoin"],
+        correctIndex: 1,
+        category: "quiz",
+        rewardCoins: 100,
+        rewardTickets: 25
+      },
+      {
+        id: "quiz_q8",
+        title: "Quiz 8: Year of Bitcoin Whitepaper",
+        question: "In what year was the Bitcoin whitepaper published by Satoshi Nakamoto?",
+        options: ["2005", "2008", "2010", "2012"],
+        correctIndex: 1,
+        category: "quiz",
+        rewardCoins: 100,
+        rewardTickets: 25
+      },
+      {
+        id: "quiz_q9",
+        title: "Quiz 9: Ethereum Smart Contract Language",
+        question: "Which programming language is predominantly used to write Ethereum smart contracts?",
+        options: ["Python", "Solidity", "Rust", "Swift"],
+        correctIndex: 1,
+        category: "quiz",
+        rewardCoins: 100,
+        rewardTickets: 25
+      },
+      {
+        id: "quiz_q10",
+        title: "Quiz 10: Purpose of Cold Wallets",
+        question: "What is a 'Cold Wallet' primarily used for in cryptocurrency?",
+        options: ["Storing crypto offline for security", "Mining coins faster", "Trading NFTs on Discord", "Automated arbitrage"],
+        correctIndex: 0,
+        category: "quiz",
+        rewardCoins: 100,
+        rewardTickets: 25
+      }
+    ];
+
+    function getQuizTasksPool() {
+      let userAdminQuiz = [];
+      try {
+        const raw = localStorage.getItem("task_game_tasks") || localStorage.getItem("admin_tasks");
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            userAdminQuiz = parsed.filter(t => t && t.category === 'quiz');
+          }
+        }
+      } catch(e) {}
+      const existingIds = new Set(userAdminQuiz.map(t => t.id));
+      const canonicalSlice = CANONICAL_QUIZ_TASKS.filter(t => !existingIds.has(t.id));
+      return [...userAdminQuiz, ...canonicalSlice];
+    }
+
+    let activeQuizTask = null;
+    window.openQuizModal = function(quizId) {
+      const allQ = getQuizTasksPool();
+      const q = allQ.find(item => item.id === quizId);
+      if (!q) return;
+
+      activeQuizTask = q;
+      const modal = document.getElementById("quizModalOverlay");
+      const titleEl = document.getElementById("quizModalTitle");
+      const qEl = document.getElementById("quizModalQuestion");
+      const optsCont = document.getElementById("quizOptionsContainer");
+      const fbEl = document.getElementById("quizFeedbackMsg");
+
+      if (titleEl) titleEl.textContent = q.title || "Quiz Trivia";
+      if (qEl) qEl.textContent = q.question;
+      if (fbEl) {
+        fbEl.textContent = "";
+        fbEl.style.color = "";
+      }
+
+      if (optsCont) {
+        const letters = ["A", "B", "C", "D"];
+        optsCont.innerHTML = (q.options || []).map((opt, idx) => `
+          <button type="button" class="quiz-opt-btn" onclick="handleQuizOptionClick(${idx})">
+            <span style="font-weight: 900; color: #6ee7b7; background: rgba(16, 185, 129, 0.25); border-radius: 6px; padding: 2px 7px;">${letters[idx] || (idx+1)}</span>
+            <span>${opt}</span>
+          </button>
+        `).join("");
+      }
+
+      if (modal) modal.style.display = "flex";
+    };
+
+    window.closeQuizModal = function() {
+      const modal = document.getElementById("quizModalOverlay");
+      if (modal) modal.style.display = "none";
+      activeQuizTask = null;
+    };
+
+    window.handleQuizOptionClick = function(chosenIdx) {
+      if (!activeQuizTask) return;
+      const q = activeQuizTask;
+      const fbEl = document.getElementById("quizFeedbackMsg");
+      const optButtons = document.querySelectorAll(".quiz-opt-btn");
+
+      if (chosenIdx === q.correctIndex) {
+        if (optButtons[chosenIdx]) {
+          optButtons[chosenIdx].classList.add("correct");
+        }
+        optButtons.forEach(b => b.disabled = true);
+
+        if (fbEl) {
+          fbEl.textContent = "✓ Correct! +100 Coins & +25 Tickets Awarded! 🎉";
+          fbEl.style.color = "#34d399";
+        }
+
+        markTaskCompleted(q.id);
+
+        let c = parseInt(localStorage.getItem("task_game_coins") || localStorage.getItem("user_coins") || "0", 10) + (q.rewardCoins || 100);
+        let tk = parseInt(localStorage.getItem("task_user_tickets") || localStorage.getItem("user_tickets") || "0", 10) + (q.rewardTickets || 25);
+        localStorage.setItem("task_game_coins", c.toString());
+        localStorage.setItem("user_coins", c.toString());
+        localStorage.setItem("task_user_tickets", tk.toString());
+        localStorage.setItem("user_tickets", tk.toString());
+
+        updateHUD();
+
+        setTimeout(() => {
+          closeQuizModal();
+          showToast("🎉 Quiz Solved! +100 Coins & +25 Tickets Added!");
+          renderCategoryTasks();
+        }, 1200);
+      } else {
+        if (optButtons[chosenIdx]) {
+          optButtons[chosenIdx].classList.add("wrong");
+          setTimeout(() => {
+            if (optButtons[chosenIdx]) optButtons[chosenIdx].classList.remove("wrong");
+          }, 600);
+        }
+        if (fbEl) {
+          fbEl.textContent = "❌ Incorrect answer. Try another option!";
+          fbEl.style.color = "#f87171";
+        }
+      }
+    };
+
+    // Purge demo tasks from localStorage immediately
+    try {
+      const rawTasks = localStorage.getItem("task_game_tasks");
+      if (rawTasks) {
+        const parsed = JSON.parse(rawTasks);
+        if (Array.isArray(parsed)) {
+          const cleaned = parsed.filter(t => t && t.id && !t.id.startsWith('task_coin_') && !t.id.startsWith('task_common_') && !t.id.startsWith('task_star_') && !t.id.startsWith('task_pro_') && !t.id.startsWith('task_ultra_'));
+          localStorage.setItem("task_game_tasks", JSON.stringify(cleaned));
+        }
+      }
+      const rawAdmin = localStorage.getItem("admin_tasks");
+      if (rawAdmin) {
+        const parsedAdmin = JSON.parse(rawAdmin);
+        if (Array.isArray(parsedAdmin)) {
+          const cleanedAdmin = parsedAdmin.filter(t => t && t.id && !t.id.startsWith('task_coin_') && !t.id.startsWith('task_common_') && !t.id.startsWith('task_star_') && !t.id.startsWith('task_pro_') && !t.id.startsWith('task_ultra_'));
+          localStorage.setItem("admin_tasks", JSON.stringify(cleanedAdmin));
+        }
+      }
+    } catch(e) {}
+
+    function getStoredTasks() {
+      try {
+        const raw = localStorage.getItem("task_game_tasks") || localStorage.getItem("admin_tasks");
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return parsed.filter(t => t && t.id && !t.id.startsWith('task_coin_') && !t.id.startsWith('task_common_') && !t.id.startsWith('task_star_') && !t.id.startsWith('task_pro_') && !t.id.startsWith('task_ultra_'));
+          }
+        }
+      } catch(e) {}
+      return [];
+    }
+
+    function getCompletedTasksMap() {
+      const map = Object.create(null);
+      try {
+        const raw = localStorage.getItem("task_game_completed_tasks");
+        if (raw) Object.assign(map, JSON.parse(raw));
+      } catch(e) {}
+      try {
+        const rawClaims = localStorage.getItem("task_game_claims");
+        if (rawClaims) Object.assign(map, JSON.parse(rawClaims));
+      } catch(e) {}
+      return map;
+    }
+
+    function isTaskCompleted(taskId, completedMap) {
+      if (!taskId) return false;
+      if (completedMap) return !!completedMap[taskId];
+      try {
+        const raw = localStorage.getItem("task_game_completed_tasks");
+        if (raw && JSON.parse(raw)[taskId]) return true;
+        const rawClaims = localStorage.getItem("task_game_claims");
+        if (rawClaims && JSON.parse(rawClaims)[taskId]) return true;
+      } catch(e) {}
+      return false;
+    }
+
+    function markTaskCompleted(taskId) {
+      try {
+        const raw = localStorage.getItem("task_game_completed_tasks");
+        const obj = raw ? JSON.parse(raw) : {};
+        obj[taskId] = Date.now();
+        localStorage.setItem("task_game_completed_tasks", JSON.stringify(obj));
+
+        const rawClaims = localStorage.getItem("task_game_claims");
+        const claims = rawClaims ? JSON.parse(rawClaims) : {};
+        claims[taskId] = Date.now();
+        localStorage.setItem("task_game_claims", JSON.stringify(claims));
+
+        let count = parseInt(localStorage.getItem("task_game_total_tasks_completed") || "0", 10);
+        count++;
+        localStorage.setItem("task_game_total_tasks_completed", count.toString());
+        state.completedTasksCount = count;
+      } catch(e) {}
+    }
+
+    function getCompletedTasksCount() {
+      const completedMap = getCompletedTasksMap();
+      const mapCount = Object.keys(completedMap).length;
+      const storedCount = parseInt(localStorage.getItem("task_game_total_tasks_completed") || localStorage.getItem("task_pass_total_completed") || "0", 10);
+      return Math.max(mapCount, storedCount);
+    }
+
+    function isTenTasksMilestoneLocked() {
+      const completedCount = getCompletedTasksCount();
+      if (completedCount < 10) return false;
+      const currentMilestone = Math.floor(completedCount / 10);
+      const unlockedMilestone = parseInt(localStorage.getItem("task_ten_milestone_unlocked") || "0", 10);
+      return currentMilestone > unlockedMilestone;
+    }
+
+    // Update Header HUD & Balances
+    function updateHUD() {
+      state.coins = parseInt(localStorage.getItem("task_game_coins") || localStorage.getItem("user_coins") || "0", 10);
+      state.stars = parseInt(localStorage.getItem("task_game_stars") || localStorage.getItem("user_stars") || "0", 10);
+      state.tickets = parseInt(localStorage.getItem("task_user_tickets") || localStorage.getItem("user_tickets") || localStorage.getItem("task_game_tickets") || "0", 10);
+      state.currentLevel = parseInt(localStorage.getItem("task_pass_level") || "1", 10);
+
+      const c = document.getElementById("hudCoins");
+      const s = document.getElementById("hudStars");
+      const t = document.getElementById("hudTickets");
+      const r = document.getElementById("userRankDisplay");
+
+      if (c) c.textContent = state.coins.toLocaleString();
+      if (s) s.textContent = state.stars.toLocaleString();
+      if (t) t.textContent = state.tickets.toLocaleString();
+      if (r) r.textContent = "LEVEL " + state.currentLevel;
+
+      updateHeroCard();
+    }
+
+    // Dynamic Header Title & Hero Card Sync
+    function updateHeroCard() {
+      const heroCard = document.getElementById("tgHeroCard");
+      if (heroCard) {
+        heroCard.style.display = "none";
+      }
+
+      const pageTitle = document.getElementById("pageCategoryTitle");
+      if (pageTitle) {
+        if (state.activeTab === "coin") {
+          pageTitle.textContent = "Coin Missions";
+        } else if (state.activeTab === "pro") {
+          pageTitle.textContent = "Pro Tasks";
+        } else if (state.activeTab === "star") {
+          pageTitle.textContent = "Star VIP Missions";
+        } else if (state.activeTab === "ultra") {
+          pageTitle.textContent = "Ultra Mega Tasks";
+        } else if (state.activeTab === "common" || state.activeTab === "task") {
+          pageTitle.textContent = "Common Tasks";
+        } else if (state.activeTab === "quiz") {
+          pageTitle.textContent = "Quiz Tasks";
+        } else {
+          pageTitle.textContent = "Missions";
+        }
+      }
+    }
+
+    // Switch Category Tab (Coin, Tasks, Star, Pro, Ultra)
+    function switchCategory(cat) {
+      if (cat === "task") cat = "common";
+      state.activeTab = cat;
+      localStorage.setItem("task_active_tab", cat);
+
+      // Update tab active classes
+      document.querySelectorAll(".tg-tab-btn").forEach(b => {
+        b.className = "tg-tab-btn";
+      });
+
+      const tabCoin = document.getElementById("tabCoin");
+      const tabCommon = document.getElementById("tabCommon") || document.getElementById("tabTask");
+      const tabStar = document.getElementById("tabStar");
+      const tabPro = document.getElementById("tabPro");
+      const tabUltra = document.getElementById("tabUltra");
+
+      if (cat === "coin" && tabCoin) tabCoin.className = "tg-tab-btn active-coin";
+      if ((cat === "common" || cat === "task") && tabCommon) tabCommon.className = "tg-tab-btn active-common";
+      if (cat === "star" && tabStar) tabStar.className = "tg-tab-btn active-star";
+      if (cat === "pro" && tabPro) tabPro.className = "tg-tab-btn active-pro";
+      if (cat === "ultra" && tabUltra) tabUltra.className = "tg-tab-btn active-ultra";
+
+      // Sync URL without reload
+      try {
+        const newUrl = window.location.pathname + "?cat=" + cat;
+        window.history.replaceState({ cat }, "", newUrl);
+      } catch(e) {}
+
+      updateHUD();
+      renderCategoryTasks();
+    }
+
+    // Render Tasks for Active Category
+    function renderCategoryTasks() {
+      const allTasks = getStoredTasks();
+      const container = document.getElementById("tasksList");
+      const bannerContainer = document.getElementById("catBannerContainer");
+      if (!container) return;
+
+      let filtered = [];
+      let bannerHtml = "";
+
+      if (state.activeTab === "star") {
+        const isVip = localStorage.getItem("task_vip_pass_active") === "true";
+        const starLimit = getStarTasksUnlockedLimit();
+        filtered = getStarTasksPool();
+
+        if (!isVip) {
+          bannerHtml = `
+            <div class="cat-status-banner" style="border-color: rgba(250, 204, 21, 0.45); background: linear-gradient(155deg, rgba(234, 179, 8, 0.15) 0%, rgba(30, 20, 10, 0.9) 100%); display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px;">
+              <div style="flex: 1; min-width: 190px;">
+                <div style="color: #fde047; font-weight: 900; font-size: 0.9rem; display: flex; align-items: center; gap: 5px;">
+                  <span>👑</span> Star Tasks (VIP Pass)
+                </div>
+                <div style="color: #94a3b8; font-size: 0.73rem; margin-top: 3px;">
+                  Unlock exclusive VIP pass & earn real Star rewards daily!
+                </div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                <!-- Lock Task Count Button (Star limit) -->
+                <button type="button" class="btn-lock-task-count" title="VIP Tasks Limit" style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 999px; font-size: 0.72rem; font-weight: 800; color: #fde047; background: rgba(250, 204, 21, 0.18); border: 1px solid rgba(250, 204, 21, 0.45); cursor: default;">
+                  🔒 <span id="starUnlockedCount">${starLimit}/${starLimit} VIP Tasks</span>
+                </button>
+                <button type="button" onclick="openVipSubscriptionModal()" style="padding: 0.45rem 0.85rem; border-radius: 10px; font-weight: 900; font-size: 0.75rem; background: linear-gradient(155deg, #facc15 0%, #eab308 100%); color: #422006; border: 1.5px solid #fef08a; cursor: pointer; white-space: nowrap; box-shadow: 0 0 12px rgba(250, 204, 21, 0.4);">⚡ Unlock VIP</button>
+                <!-- Task Renew Option: Watch Ad Button -->
+                <button type="button" class="btn-renew-star" onclick="renewStarTasksWithAd()" title="Watch Ad to Renew +5 Star Tasks" style="display: inline-flex; align-items: center; gap: 5px; padding: 5px 11px; border-radius: 10px; font-size: 0.73rem; font-weight: 900; color: #ffffff; background: linear-gradient(135deg, #9333ea 0%, #db2777 100%); border: 1.5px solid #f472b6; box-shadow: 0 2px 8px rgba(219, 39, 119, 0.4); cursor: pointer; transition: all 0.2s;">
+                  📺 Watch Ad to Renew Tasks (+5) 🔓
+                </button>
+              </div>
+            </div>
+          `;
+        } else {
+          bannerHtml = `
+            <div class="cat-status-banner" style="border-color: rgba(52, 211, 153, 0.45); background: rgba(16, 185, 129, 0.12); display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px;">
+              <div style="flex: 1; min-width: 190px;">
+                <div style="color: #34d399; font-weight: 900; font-size: 0.88rem; display: flex; align-items: center; gap: 5px;">
+                  <span>👑</span> VIP Pass Active • Full Star Missions Unlocked
+                </div>
+                <div style="color: #94a3b8; font-size: 0.72rem; margin-top: 2px;">
+                  Exclusive VIP Missions active with instant Star bounties
+                </div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                <!-- Lock Task Count Button (Star limit) -->
+                <button type="button" class="btn-lock-task-count" title="VIP Tasks Limit" style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 999px; font-size: 0.72rem; font-weight: 800; color: #34d399; background: rgba(16, 185, 129, 0.18); border: 1px solid rgba(52, 211, 153, 0.45); cursor: default;">
+                  🔒 <span id="starUnlockedCount">${starLimit}/${starLimit} Unlocked Today</span>
+                </button>
+                <button type="button" class="btn-renew-star" onclick="renewStarTasksWithAd()" style="padding: 0.4rem 0.75rem; border-radius: 10px; font-weight: 800; font-size: 0.72rem; background: linear-gradient(155deg, #9333ea 0%, #db2777 100%); color: #fff; border: 1px solid #f472b6; cursor: pointer; white-space: nowrap;">📺 Watch Ad to Renew Tasks (+5) 🔓</button>
+              </div>
+            </div>
+          `;
+        }
+      } else if (state.activeTab === "pro") {
+        let proSettings = null;
+        try {
+          const rawPro = localStorage.getItem("task_game_pro_event_settings");
+          if (rawPro) proSettings = JSON.parse(rawPro);
+        } catch(e) {}
+        const isEventActive = proSettings ? (proSettings.active !== false) : true;
+        filtered = allTasks.filter(t => t.category === "pro" || t.category === "elite" || t.category === "event");
+        bannerHtml = `
+          <div class="cat-status-banner" style="border-color: rgba(52, 211, 153, 0.4); background: linear-gradient(155deg, rgba(16, 185, 129, 0.15) 0%, rgba(5, 150, 105, 0.08) 100%);">
+            <div>
+              <div style="color: #34d399; font-weight: 900; font-size: 0.9rem; display: flex; align-items: center; gap: 5px;">
+                <span>💎</span> Pro Elite 3-Pack Challenge
+              </div>
+              <div style="color: #94a3b8; font-size: 0.72rem; margin-top: 2px;">
+                Complete 3-task packs: Win 50% half price on 1st task, and full total price on all 3!
+              </div>
+            </div>
+            <span style="font-size: 0.7rem; font-weight: 800; color: ${isEventActive ? '#34d399' : '#f87171'}; background: ${isEventActive ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}; border: 1px solid ${isEventActive ? 'rgba(52, 211, 153, 0.4)' : 'rgba(239, 68, 68, 0.4)'}; padding: 3px 8px; border-radius: 999px; white-space: nowrap;">
+              ${isEventActive ? '⏱️ Active' : '○ Ended'}
+            </span>
+          </div>
+        `;
+      } else if (state.activeTab === "ultra") {
+        // Ultra tasks
+        filtered = allTasks.filter(t => t.category === "ultra" || t.category === "mega");
+        bannerHtml = `
+          <div class="cat-status-banner" style="border-color: rgba(217, 70, 239, 0.4); background: linear-gradient(155deg, rgba(46, 16, 101, 0.4) 0%, rgba(29, 9, 68, 0.7) 100%);">
+            <div>
+              <div style="color: #f0abfc; font-weight: 900; font-size: 0.9rem; display: flex; align-items: center; gap: 5px;">
+                <span>⚡</span> Ultra Mega Missions
+              </div>
+              <div style="color: #cbd5e1; font-size: 0.72rem; margin-top: 2px;">
+                Apex challenge bounties: win massive Coins &amp; Stars upon verification
+              </div>
+            </div>
+            <span style="font-size: 0.7rem; font-weight: 800; color: #f0abfc; background: rgba(217, 70, 239, 0.22); border: 1px solid rgba(217, 70, 239, 0.45); padding: 3px 8px; border-radius: 999px;">⚡ 5x Multiplier</span>
+          </div>
+        `;
+      } else if (state.activeTab === "common" || state.activeTab === "task") {
+        // Common tasks (Free entry, 10-Task Daily Unlock Limit, +10 on Ad Renew)
+        const commonLimit = getCommonTasksUnlockedLimit();
+        filtered = getCommonTasksPool();
+        bannerHtml = `
+          <div class="cat-status-banner" style="border-color: rgba(56, 189, 248, 0.4); background: linear-gradient(155deg, rgba(14, 165, 233, 0.16) 0%, rgba(2, 132, 199, 0.1) 100%); display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px;">
+            <div style="flex: 1; min-width: 190px;">
+              <div style="color: #38bdf8; font-weight: 900; font-size: 0.9rem; display: flex; align-items: center; gap: 5px;">
+                <span>📋</span> Common Free Tasks
+              </div>
+              <div style="color: #94a3b8; font-size: 0.72rem; margin-top: 2px;">
+                Standard missions • Free entry • Win 50 Tickets on completion!
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+              <!-- Lock Task Count Button (10 limit daily) -->
+              <button type="button" class="btn-lock-task-count" title="Tasks Unlocked Today" style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 999px; font-size: 0.72rem; font-weight: 800; color: #bae6fd; background: rgba(14, 165, 233, 0.22); border: 1px solid rgba(56, 189, 248, 0.45); cursor: default;">
+                🔒 <span id="commonUnlockedCount">${commonLimit}/${commonLimit} Unlocked Today</span>
+              </button>
+              <!-- Task Renew Option: Watch Ad Button -->
+              <button type="button" class="btn-renew-common" onclick="renewCommonTasksWithAd()" title="Watch Ad to Renew +10 Tasks" style="display: inline-flex; align-items: center; gap: 5px; padding: 5px 11px; border-radius: 10px; font-size: 0.73rem; font-weight: 900; color: #ffffff; background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); border: 1.5px solid #38bdf8; box-shadow: 0 2px 8px rgba(14, 165, 233, 0.4); cursor: pointer; transition: all 0.2s;">
+                📺 Watch Ad to Renew Tasks (+10) 🔓
+              </button>
+              <span style="font-size: 0.72rem; color: #cbd5e1; font-weight: 800; background: rgba(56, 189, 248, 0.18); border: 1px solid rgba(56, 189, 248, 0.4); padding: 4px 8px; border-radius: 999px;">🎟️ Free Entry</span>
+            </div>
+          </div>
+        `;
+      } else if (state.activeTab === "quiz") {
+        // Quiz tasks (Trivia knowledge missions)
+        filtered = getQuizTasksPool();
+        bannerHtml = `
+          <div class="cat-status-banner" style="border-color: rgba(16, 185, 129, 0.45); background: linear-gradient(155deg, rgba(6, 78, 59, 0.4) 0%, rgba(4, 47, 46, 0.7) 100%); display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px;">
+            <div style="flex: 1; min-width: 190px;">
+              <div style="color: #6ee7b7; font-weight: 900; font-size: 0.9rem; display: flex; align-items: center; gap: 5px;">
+                <span>🧠</span> Quiz Knowledge Missions
+              </div>
+              <div style="color: #94a3b8; font-size: 0.72rem; margin-top: 2px;">
+                Answer trivia questions • Win 100 Coins &amp; 25 Tickets on correct answer!
+              </div>
+            </div>
+            <span style="font-size: 0.72rem; color: #6ee7b7; font-weight: 800; background: rgba(16, 185, 129, 0.22); border: 1px solid rgba(52, 211, 153, 0.45); padding: 4px 9px; border-radius: 999px;">🧠 Trivia Quiz</span>
+          </div>
+        `;
+      } else {
+        // Coin tasks (Standard, 8-Task Daily Unlock Limit, +8 on Ad Renew)
+        const coinLimit = getCoinTasksUnlockedLimit();
+        filtered = getCoinTasksPool();
+        bannerHtml = `
+          <div class="cat-status-banner" style="border-color: rgba(250, 204, 21, 0.4); background: linear-gradient(155deg, rgba(234, 179, 8, 0.14) 0%, rgba(10, 23, 56, 0.85) 100%); display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px;">
+            <div style="flex: 1; min-width: 190px;">
+              <div style="color: #fde047; font-weight: 900; font-size: 0.9rem; display: flex; align-items: center; gap: 5px;">
+                <span>🪙</span> Standard Coin Missions
+              </div>
+              <div style="color: #94a3b8; font-size: 0.72rem; margin-top: 2px;">
+                Free to complete • Instant coin prizes added directly to balance
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+              <!-- Lock Task Count Button (8 limit daily) -->
+              <button type="button" class="btn-lock-task-count" title="Tasks Unlocked Today" style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 999px; font-size: 0.72rem; font-weight: 800; color: #fde047; background: rgba(250, 204, 21, 0.18); border: 1px solid rgba(250, 204, 21, 0.45); cursor: default;">
+                🔒 <span id="coinUnlockedCount">${coinLimit}/${coinLimit} Unlocked Today</span>
+              </button>
+              <!-- Task Renew Option: Watch Ad Button -->
+              <button type="button" class="btn-renew-coin" onclick="renewCoinTasksWithAd()" title="Watch Ad to Renew +8 Tasks" style="display: inline-flex; align-items: center; gap: 5px; padding: 5px 11px; border-radius: 10px; font-size: 0.73rem; font-weight: 900; color: #422006; background: linear-gradient(135deg, #facc15 0%, #eab308 100%); border: 1.5px solid #fef08a; box-shadow: 0 2px 8px rgba(250, 204, 21, 0.4); cursor: pointer; transition: all 0.2s;">
+                📺 Watch Ad to Renew Tasks (+8) 🔓
+              </button>
+              <span style="font-size: 0.72rem; color: #facc15; font-weight: 800; background: rgba(250, 204, 21, 0.18); border: 1px solid rgba(250, 204, 21, 0.4); padding: 4px 8px; border-radius: 999px;">Free</span>
+            </div>
+          </div>
+        `;
+      }
+
+      if (bannerContainer) bannerContainer.innerHTML = bannerHtml;
+
+      // Filter out completed tasks across Coin task page and Any task page per user request
+      const completedMap = getCompletedTasksMap();
+      filtered = filtered.filter(t => !isTaskCompleted(t.id, completedMap));
+
+      // 10 Tasks Milestone Unlock Barrier: Each 10 tasks completed requires watching an ad to unlock the next 10 tasks
+      if (isTenTasksMilestoneLocked()) {
+        const completedCount = getCompletedTasksCount();
+        container.innerHTML = `
+          <div style="background: linear-gradient(155deg, rgba(15, 23, 42, 0.95) 0%, rgba(10, 18, 38, 0.98) 100%); border: 2px solid #facc15; border-radius: 20px; padding: 1.75rem 1.25rem; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.7), 0 0 24px rgba(250, 204, 21, 0.25); margin: 1rem 0;">
+            <div style="font-size: 3rem; margin-bottom: 0.5rem; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.5));">🎯📺</div>
+            <div class="game-outline" style="font-size: 1.25rem; color: #fde047; margin-bottom: 0.4rem;">10 Tasks Milestone Reached!</div>
+            <div style="font-size: 0.82rem; color: #cbd5e1; line-height: 1.45; margin-bottom: 1.25rem;">
+              You have completed <b>${completedCount} tasks</b>! Click below to watch the sponsored video ad and unlock your next 10 tasks.
+            </div>
+            <button type="button" onclick="watchAdToUnlockNextTenTasks()" style="width: 100%; padding: 0.85rem; border-radius: 12px; font-weight: 900; font-size: 0.95rem; background: linear-gradient(155deg, #facc15 0%, #eab308 50%, #ca8a04 100%); color: #422006; border: 1.5px solid #fef08a; cursor: pointer; box-shadow: 0 4px 16px rgba(234, 179, 8, 0.55); transition: transform 0.2s;">
+              📺 Watch Ad to Unlock Next 10 Tasks 🔓
+            </button>
+          </div>
+        `;
+        return;
+      }
+
+      if (filtered.length === 0) {
+        if (state.activeTab === "common" || state.activeTab === "task") {
+          container.innerHTML = `
+            <div style="text-align: center; padding: 2.5rem 1rem; background: rgba(15, 23, 42, 0.6); border: 1.5px dashed rgba(56, 189, 248, 0.4); border-radius: 16px;">
+              <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🎉</div>
+              <div style="color: #ffffff; font-weight: 800; font-size: 1.05rem;">All Common Tasks Completed!</div>
+              <div style="color: #94a3b8; font-size: 0.8rem; margin: 0.4rem 0 1.25rem 0;">Watch a sponsor ad to renew and unlock 10 more Common Tasks.</div>
+              <button type="button" onclick="renewCommonTasksWithAd()" style="padding: 0.75rem 1.5rem; border-radius: 12px; font-weight: 900; font-size: 0.9rem; background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: #ffffff; border: 1.5px solid #38bdf8; cursor: pointer; box-shadow: 0 4px 15px rgba(14, 165, 233, 0.4);">
+                📺 Watch Ad to Renew Tasks (+10) 🔓
+              </button>
+            </div>
+          `;
+          return;
+        } else if (state.activeTab === "coin") {
+          container.innerHTML = `
+            <div style="text-align: center; padding: 2.5rem 1rem; background: rgba(15, 23, 42, 0.6); border: 1.5px dashed rgba(250, 204, 21, 0.4); border-radius: 16px;">
+              <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🪙🎉</div>
+              <div style="color: #ffffff; font-weight: 800; font-size: 1.05rem;">All Coin Missions Completed!</div>
+              <div style="color: #94a3b8; font-size: 0.8rem; margin: 0.4rem 0 1.25rem 0;">Watch a sponsor ad to renew and unlock 8 more Coin Missions.</div>
+              <button type="button" onclick="renewCoinTasksWithAd()" style="padding: 0.75rem 1.5rem; border-radius: 12px; font-weight: 900; font-size: 0.9rem; background: linear-gradient(135deg, #facc15 0%, #eab308 100%); color: #422006; border: 1.5px solid #fef08a; cursor: pointer; box-shadow: 0 4px 15px rgba(250, 204, 21, 0.4);">
+                📺 Watch Ad to Renew Tasks (+8) 🔓
+              </button>
+            </div>
+          `;
+          return;
+        } else if (state.activeTab === "star") {
+          container.innerHTML = `
+            <div style="text-align: center; padding: 2.5rem 1rem; background: rgba(15, 23, 42, 0.6); border: 1.5px dashed rgba(219, 39, 119, 0.4); border-radius: 16px;">
+              <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">⭐🎉</div>
+              <div style="color: #ffffff; font-weight: 800; font-size: 1.05rem;">All Star Tasks Completed!</div>
+              <div style="color: #94a3b8; font-size: 0.8rem; margin: 0.4rem 0 1.25rem 0;">Watch a sponsor ad to renew and unlock 5 more Star Missions.</div>
+              <button type="button" onclick="renewStarTasksWithAd()" style="padding: 0.75rem 1.5rem; border-radius: 12px; font-weight: 900; font-size: 0.9rem; background: linear-gradient(135deg, #9333ea 0%, #db2777 100%); color: #ffffff; border: 1.5px solid #f472b6; cursor: pointer; box-shadow: 0 4px 15px rgba(219, 39, 119, 0.4);">
+                📺 Watch Ad to Renew Tasks (+5) 🔓
+              </button>
+            </div>
+          `;
+          return;
+        } else if (state.activeTab === "quiz") {
+          container.innerHTML = `
+            <div style="text-align: center; padding: 2.5rem 1rem; background: rgba(15, 23, 42, 0.6); border: 1.5px dashed rgba(52, 211, 153, 0.4); border-radius: 16px;">
+              <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🧠🎉</div>
+              <div style="color: #ffffff; font-weight: 800; font-size: 1.05rem;">All Quiz Tasks Solved!</div>
+              <div style="color: #94a3b8; font-size: 0.8rem; margin-top: 0.35rem;">Congratulations! You answered all trivia questions correctly.</div>
+            </div>
+          `;
+          return;
+        }
+        container.innerHTML = `
+          <div style="text-align: center; padding: 3rem 1rem; background: rgba(15, 23, 42, 0.6); border: 1.5px dashed rgba(56, 189, 248, 0.3); border-radius: 16px;">
+            <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🎉</div>
+            <div style="color: #ffffff; font-weight: 800; font-size: 1.05rem;">All Missions Completed!</div>
+            <div style="color: #94a3b8; font-size: 0.78rem; margin-top: 0.35rem;">Check back soon for new available missions.</div>
+          </div>
+        `;
+        return;
+      }
+
+      // Render Interactive Telegram Task Cards
+      container.innerHTML = filtered.map((task, idx) => {
+        const num = idx + 1;
+        const isCommon = task.category === "common";
+        const isPro = task.category === "pro" || task.category === "elite";
+        const isStar = task.category === "premium" || task.category === "star";
+        const isUltra = task.category === "ultra" || task.category === "mega";
+        const isQuiz = task.category === "quiz";
+
+        const rewardCoins = (task.rewardCoins !== undefined && task.rewardCoins !== null && task.rewardCoins !== "")
+          ? Number(task.rewardCoins)
+          : ((task.coins !== undefined && task.coins !== null && task.coins !== "")
+              ? Number(task.coins)
+              : ((task.reward !== undefined && task.reward !== null && task.reward !== "")
+                  ? Number(task.reward)
+                  : (isCommon ? 0 : (isQuiz ? 100 : (isUltra ? 5000 : (isPro ? 1000 : (isStar ? 200 : 100)))))));
+
+        const rewardStars = (task.rewardStars !== undefined && task.rewardStars !== null && task.rewardStars !== "")
+          ? Number(task.rewardStars)
+          : ((task.stars !== undefined && task.stars !== null && task.stars !== "")
+              ? Number(task.stars)
+              : (isUltra ? 50 : (isStar ? 10 : 0)));
+
+        const rewardTickets = (task.rewardTickets !== undefined && task.rewardTickets !== null && task.rewardTickets !== "")
+          ? Number(task.rewardTickets)
+          : ((task.tickets !== undefined && task.tickets !== null && task.tickets !== "")
+              ? Number(task.tickets)
+              : (isCommon ? 50 : (isQuiz ? 25 : 0)));
+
+        const completed = isTaskCompleted(task.id, completedMap);
+
+        let badgeClass = "badge-coin";
+        let bountyClass = "bounty-coin";
+        let bountyText = "🪙 +" + rewardCoins.toLocaleString();
+
+        if (isQuiz) {
+          badgeClass = "badge-quiz";
+          bountyClass = "bounty-quiz";
+          bountyText = "🪙 +100 • 🎟️ +25";
+        } else if (isUltra) {
+          badgeClass = "badge-ultra";
+          bountyClass = "bounty-ultra";
+          bountyText = "⚡ +" + rewardCoins.toLocaleString() + " 🪙 & +" + rewardStars + " ⭐";
+        } else if (isPro) {
+          badgeClass = "badge-pro";
+          bountyClass = "bounty-pro";
+          bountyText = "💎 +" + rewardCoins.toLocaleString();
+        } else if (isStar) {
+          badgeClass = "badge-star";
+          bountyClass = "bounty-star";
+          bountyText = (rewardStars > 0) ? "⭐ +" + rewardStars + " • 🪙 +" + rewardCoins : "⭐ VIP 🪙 +" + rewardCoins;
+        } else if (isCommon || (rewardTickets > 0 && rewardCoins === 0 && rewardStars === 0)) {
+          badgeClass = "badge-task";
+          bountyClass = "bounty-task";
+          bountyText = "🎟️ +" + rewardTickets.toLocaleString() + " Tickets";
+        }
+
+        const halfNotice = isPro ? `<span style="font-size: 0.65rem; color: #34d399; font-weight: 800; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(52, 211, 153, 0.35); padding: 1px 5px; border-radius: 4px;">Half ${Math.floor(rewardCoins/2)} on 1st</span>` : "";
+
+        let actionArea = "";
+        if (completed) {
+          actionArea = `<span class="tg-task-completed-pill">✓ Claimed</span>`;
+        } else if (isQuiz) {
+          actionArea = `
+            <div class="tg-task-actions">
+              <button type="button" class="btn-tg-verify" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); border-color: #6ee7b7; box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4);" onclick="openQuizModal('${task.id}')" title="Play Quiz Question">🧠 Play Quiz</button>
+            </div>
+          `;
+        } else {
+          actionArea = `
+            <div class="tg-task-actions">
+              <button type="button" class="btn-tg-open" onclick="handleOpenTask('${task.url || 'https://google.com'}')" title="Open Task Link">↗ Open</button>
+              <button type="button" class="btn-tg-verify" onclick="openVerifyModal('${task.id}', '${task.title.replace(/'/g, "\\'")}', ${rewardCoins}, ${rewardStars}, '${task.category || 'simple'}', ${rewardTickets})" title="Verify and Claim Reward">✓ Verify</button>
+            </div>
+          `;
+        }
+
+        return `
+          <div class="tg-task-card${completed ? ' completed' : ''}" id="taskCard_${task.id}">
+            <div style="display: flex; align-items: center; gap: 0.75rem; flex: 1; min-width: 0;">
+              <!-- 3D Number / Category Badge -->
+              <div class="tg-task-num-badge ${badgeClass}">
+                ${num}
+              </div>
+              <!-- Title, Description & Bounty -->
+              <div class="tg-task-info">
+                <div class="tg-task-title-row">
+                  <span class="tg-task-title" title="${task.title}">${task.title}</span>
+                  <span class="tg-task-bounty-pill ${bountyClass}">${bountyText}</span>
+                  ${halfNotice}
+                </div>
+                <div class="tg-task-desc">${task.description || 'Complete steps and confirm verification'}</div>
+              </div>
+            </div>
+            <!-- Action / Claim Area -->
+            ${actionArea}
+          </div>
+        `;
+      }).join("");
+    }
+
+    function handleOpenTask(url) {
+      if (isTenTasksMilestoneLocked()) {
+        showToast("🔒 Please watch ad to unlock the next 10 tasks first!");
+        return;
+      }
+      window.open(url, "_blank");
+      showToast("Opening mission link ↗");
+    }
+
+    // Modal Handling
+    let activeVerifyTask = null;
+    window.activeVerifyTask = null;
+    function openVerifyModal(taskId, title, rewardCoins, rewardStars, category, rewardTickets) {
+      if (isTenTasksMilestoneLocked()) {
+        showToast("🔒 Please watch ad to unlock the next 10 tasks first!");
+        return;
+      }
+      activeVerifyTask = { 
+        taskId, 
+        title, 
+        rewardCoins: Number(rewardCoins) || 0, 
+        rewardStars: Number(rewardStars) || 0, 
+        category, 
+        rewardTickets: Number(rewardTickets) || 0 
+      };
+      window.activeVerifyTask = activeVerifyTask;
+      const modal = document.getElementById("taskVerifyModalOverlay");
+      const titleEl = document.getElementById("verifyModalTitle");
+      const descEl = document.getElementById("verifyModalDesc");
+      const pillEl = document.getElementById("verifyModalBountyPill");
+      const emojiEl = document.getElementById("modalTaskEmoji");
+
+      if (titleEl) titleEl.textContent = "Verify: " + title;
+      if (emojiEl) emojiEl.textContent = (category === "ultra" || category === "mega") ? "⚡" : ((category === "pro") ? "💎" : ((category === "premium" || category === "star") ? "⭐" : "🪙"));
+      if (pillEl) {
+        if (category === "ultra" || category === "mega") {
+          pillEl.textContent = (rewardStars > 0) ? `+${rewardCoins} 🪙 COINS & +${rewardStars} ⭐ STARS` : `+${rewardCoins} 🪙 ULTRA BOUNTY`;
+          pillEl.style.cssText = "background: rgba(217, 70, 239, 0.22); border: 1px solid #d946ef; color: #f0abfc;";
+        } else if (category === "star" || category === "premium") {
+          pillEl.textContent = (rewardStars > 0) ? `+${rewardStars} ⭐ STARS & +${rewardCoins} 🪙 COINS` : `+${rewardCoins} 🪙 VIP BOUNTY`;
+          pillEl.style.cssText = "background: rgba(250, 204, 21, 0.2); border: 1px solid #facc15; color: #fde047;";
+        } else if (category === "pro") {
+          pillEl.textContent = `+${rewardCoins} 💎 ELITE BOUNTY`;
+          pillEl.style.cssText = "background: rgba(16, 185, 129, 0.2); border: 1px solid #34d399; color: #34d399;";
+        } else if (category === "common" || (rewardTickets > 0 && rewardCoins === 0 && rewardStars === 0)) {
+          if (emojiEl) emojiEl.textContent = "📋";
+          pillEl.textContent = `+${rewardTickets || 50} 🎟️ TICKETS REWARD`;
+          pillEl.style.cssText = "background: rgba(14, 165, 233, 0.2); border: 1px solid #38bdf8; color: #38bdf8;";
+        } else {
+          pillEl.textContent = `+${rewardCoins} 🪙 COINS REWARD`;
+          pillEl.style.cssText = "background: rgba(14, 165, 233, 0.2); border: 1px solid #38bdf8; color: #38bdf8;";
+        }
+      }
+      if (descEl) descEl.textContent = "Confirm task completion to credit your reward directly to your balance.";
+      if (modal) modal.style.display = "flex";
+    }
+
+    function closeVerifyModal() {
+      const modal = document.getElementById("taskVerifyModalOverlay");
+      if (modal) modal.style.display = "none";
+      activeVerifyTask = null;
+      window.activeVerifyTask = null;
+    }
+
+    function submitVerification() {
+      const verifyBtn = document.getElementById("btnVerifyConfirm");
+      if (verifyBtn && verifyBtn.disabled) return;
+      if (verifyBtn) {
+        verifyBtn.disabled = true;
+        verifyBtn.classList.add("loading");
+        setTimeout(() => {
+          verifyBtn.disabled = false;
+          verifyBtn.classList.remove("loading");
+        }, 1500);
+      }
+
+      if (!activeVerifyTask) return;
+      const { taskId, rewardCoins, rewardStars, category, rewardTickets } = activeVerifyTask;
+      activeVerifyTask = null;
+      window.activeVerifyTask = null;
+
+      if (isTaskCompleted(taskId)) {
+        closeVerifyModal();
+        return;
+      }
+
+      markTaskCompleted(taskId);
+
+      // Award Coins (Exact addition)
+      let c = parseInt(localStorage.getItem("task_game_coins") || localStorage.getItem("user_coins") || localStorage.getItem("task_game_coins_alt") || "0", 10) || 0;
+      if (rewardCoins > 0) {
+        c += rewardCoins;
+        localStorage.setItem("task_game_coins", c.toString());
+        localStorage.setItem("user_coins", c.toString());
+        localStorage.setItem("task_game_coins_alt", c.toString());
+        state.coins = c;
+      }
+
+      // Award Stars if applicable (Exact addition)
+      let s = parseInt(localStorage.getItem("task_game_stars") || localStorage.getItem("user_stars") || "0", 10) || 0;
+      if (rewardStars > 0) {
+        s += rewardStars;
+        localStorage.setItem("task_game_stars", s.toString());
+        localStorage.setItem("user_stars", s.toString());
+        state.stars = s;
+      }
+
+      // Award Tickets if applicable (Exact addition)
+      let tk = parseInt(localStorage.getItem("task_user_tickets") || localStorage.getItem("user_tickets") || localStorage.getItem("task_game_tickets") || "0", 10) || 0;
+      if (rewardTickets > 0) {
+        tk += rewardTickets;
+        localStorage.setItem("task_user_tickets", tk.toString());
+        localStorage.setItem("user_tickets", tk.toString());
+        localStorage.setItem("task_game_tickets", tk.toString());
+        state.tickets = tk;
+      }
+
+      // Advance Task Pass Level & Award Canonical Pass Level Reward
+      let passCompleted = parseInt(localStorage.getItem("task_pass_total_completed") || localStorage.getItem("task_game_total_tasks_completed") || "0", 10);
+      passCompleted++;
+      const completedLvl = passCompleted;
+      const newLvl = Math.min(5000, completedLvl + 1);
+      localStorage.setItem("task_pass_total_completed", passCompleted.toString());
+      localStorage.setItem("task_game_total_tasks_completed", passCompleted.toString());
+      localStorage.setItem("task_pass_level", newLvl.toString());
+      localStorage.setItem("completed_tasks_count", passCompleted.toString());
+      state.currentLevel = newLvl;
+
+      // Calculate and credit canonical 500-level Task Pass reward
+      const passBand = Math.floor((completedLvl - 1) / 10);
+      if (completedLvl % 10 === 0) {
+        const passStars = 100 + (Math.floor(completedLvl / 10) - 1) * 25;
+        s += passStars;
+        localStorage.setItem("task_game_stars", s.toString());
+        localStorage.setItem("user_stars", s.toString());
+        state.stars = s;
+      } else if (completedLvl % 2 === 0) {
+        const passTickets = 5 + passBand * 5;
+        tk += passTickets;
+        localStorage.setItem("task_user_tickets", tk.toString());
+        localStorage.setItem("user_tickets", tk.toString());
+        localStorage.setItem("task_game_tickets", tk.toString());
+        state.tickets = tk;
+      } else {
+        const passCoins = 1000 + passBand * 100;
+        c += passCoins;
+        localStorage.setItem("task_game_coins", c.toString());
+        localStorage.setItem("user_coins", c.toString());
+        state.coins = c;
+      }
+
+      // Broadcast Real-Time Sync across windows
+      try {
+        const bc = new BroadcastChannel('nova_task_sync');
+        bc.postMessage({ type: 'TASK_COMPLETED', taskId, rewardCoins, rewardStars, rewardTickets, timestamp: Date.now() });
+        bc.postMessage({ type: 'BALANCES_UPDATED', coins: c, stars: s, tickets: state.tickets, timestamp: Date.now() });
+        bc.close();
+      } catch(e) {}
+
+      try {
+        const bSync = new BroadcastChannel('balance_sync_channel');
+        bSync.postMessage({ type: 'BALANCE_UPDATED', coins: c, stars: s, tickets: state.tickets });
+        bSync.close();
+      } catch(e) {}
+
+      try {
+        if (typeof CustomEvent === "function") {
+          window.dispatchEvent(new CustomEvent('balance:changed', { detail: { coins: c, stars: s, tickets: state.tickets } }));
+        } else if (typeof Event === "function") {
+          window.dispatchEvent(new Event('balance:changed'));
+        }
+      } catch(e) {}
+
+      closeVerifyModal();
+      showToast("🎉 Mission Verified! Reward added to balance!");
+      updateHUD();
+      renderCategoryTasks();
+    }
+
+    // Hero Action Handlers
+    function handleHeroAction1() {
+      if (state.activeTab === "coin") {
+        // Daily Streak Bonus
+        let c = parseInt(localStorage.getItem("task_game_coins") || localStorage.getItem("user_coins") || localStorage.getItem("task_game_coins_alt") || "0", 10);
+        c += 50;
+        localStorage.setItem("task_game_coins", c.toString());
+        localStorage.setItem("user_coins", c.toString());
+        localStorage.setItem("task_game_coins_alt", c.toString());
+        state.coins = c;
+        updateHUD();
+        window.dispatchEvent(new Event('balance:changed'));
+        try {
+          const bSync = new BroadcastChannel('balance_sync_channel');
+          bSync.postMessage({ type: 'BALANCE_UPDATED', coins: c, stars: state.stars, tickets: state.tickets });
+          bSync.close();
+        } catch(e) {}
+        showToast("🔥 Daily Bonus Claimed! +50 🪙 Coins!");
+      } else if (state.activeTab === "star") {
+        watchAdForExtraTasks();
+      } else if (state.activeTab === "pro") {
+        showToast("💎 3-Task Challenge Active: Complete missions to earn full bounty!");
+      } else if (state.activeTab === "ultra") {
+        let c = parseInt(localStorage.getItem("task_game_coins") || localStorage.getItem("user_coins") || localStorage.getItem("task_game_coins_alt") || "0", 10);
+        c += 100;
+        localStorage.setItem("task_game_coins", c.toString());
+        localStorage.setItem("user_coins", c.toString());
+        localStorage.setItem("task_game_coins_alt", c.toString());
+        state.coins = c;
+        updateHUD();
+        window.dispatchEvent(new Event('balance:changed'));
+        try {
+          const bSync = new BroadcastChannel('balance_sync_channel');
+          bSync.postMessage({ type: 'BALANCE_UPDATED', coins: c, stars: state.stars, tickets: state.tickets });
+          bSync.close();
+        } catch(e) {}
+        showToast("⚡ Ultra Mega Bonus Claimed! +100 🪙 Coins!");
+      } else {
+        window.location.href = "../leaderboard/index.html";
+      }
+    }
+
+    function handleHeroAction2() {
+      if (state.activeTab === "star") {
+        window.location.href = "../shop/index.html";
+      } else if (state.activeTab === "pro") {
+        window.location.href = "../wallet/index.html";
+      } else {
+        window.location.href = "../leaderboard/index.html";
+      }
+    }
+
+    // Rewarded Ad Simulation (+5 Star Tasks) & 10-Task Unlock Ad
+    let adInterval = null;
+
+    function watchAdToUnlockNextTenTasks() {
+      const completedCount = getCompletedTasksCount();
+      // 1. Open sponsor ad link in new tab
+      if (typeof openSponsorAdLink === "function") {
+        openSponsorAdLink(Math.floor(completedCount / 10));
+      } else if (typeof window.openSponsorAdLink === "function") {
+        window.openSponsorAdLink(Math.floor(completedCount / 10));
+      }
+
+      // 2. Open rewarded ad modal
+      const modal = document.getElementById("rewardedAdModalOverlay");
+      const titleEl = document.querySelector("#rewardedAdModalOverlay .modal-reward-title");
+      const badgeEl = document.querySelector("#rewardedAdModalOverlay .modal-track-badge");
+      const descEl = document.querySelector("#rewardedAdModalOverlay .modal-reward-desc");
+      const btn = document.getElementById("btnClaimAdReward");
+      const fill = document.getElementById("adProgressFill");
+      const count = document.getElementById("adCountdownSeconds");
+
+      if (titleEl) titleEl.textContent = "10 Tasks Milestone Ad";
+      if (badgeEl) badgeEl.textContent = "UNLOCK NEXT 10 TASKS";
+      if (descEl) descEl.innerHTML = "Watching sponsor ad to unlock your next 10 missions...";
+
+      if (modal) modal.style.display = "flex";
+      if (btn) {
+        btn.disabled = true;
+        btn.style.cursor = "not-allowed";
+        btn.textContent = "⏳ Watching Ad...";
+        btn.onclick = finishTenTaskUnlockAd;
+      }
+      if (fill) fill.style.width = "0%";
+
+      // Run SDK rewarded ad in background
+      const runAd = (typeof window.runRewardedAd === "function")
+        ? window.runRewardedAd()
+        : (typeof show_11677609 === "function" ? show_11677609("pop") : (typeof window.show_11677609 === "function" ? window.show_11677609("pop") : Promise.resolve({ success: true })));
+
+      let secs = 5;
+      clearInterval(adInterval);
+      adInterval = setInterval(() => {
+        secs--;
+        if (count) count.textContent = secs;
+        if (fill) fill.style.width = ((5 - secs) * 20) + "%";
+
+        if (secs <= 0) {
+          clearInterval(adInterval);
+          Promise.resolve(runAd).catch(() => {}).then(() => {
+            if (btn) {
+              btn.disabled = false;
+              btn.style.cursor = "pointer";
+              btn.style.background = "linear-gradient(155deg, #10b981 0%, #059669 100%)";
+              btn.style.color = "#ffffff";
+              btn.textContent = "Unlock Next 10 Tasks 🔓";
+            }
+          });
+        }
+      }, 1000);
+    }
+
+    function finishTenTaskUnlockAd() {
+      closeAdModal();
+      const completedCount = getCompletedTasksCount();
+      const currentMilestone = Math.floor(completedCount / 10);
+      localStorage.setItem("task_ten_milestone_unlocked", currentMilestone.toString());
+      try {
+        const bc = new BroadcastChannel('nova_task_sync');
+        bc.postMessage({ type: 'TEN_TASKS_UNLOCKED', milestone: currentMilestone, timestamp: Date.now() });
+        bc.close();
+      } catch(e) {}
+      showToast("🎉 Ad Completed! Next 10 Tasks Successfully Unlocked!");
+      renderCategoryTasks();
+    }
+
+    function watchAdForExtraTasks() {
+      // 1. Open sponsor ad link in new tab
+      if (typeof openSponsorAdLink === "function") {
+        openSponsorAdLink(Date.now());
+      } else if (typeof window.openSponsorAdLink === "function") {
+        window.openSponsorAdLink(Date.now());
+      }
+
+      const modal = document.getElementById("rewardedAdModalOverlay");
+      const titleEl = document.querySelector("#rewardedAdModalOverlay .modal-reward-title");
+      const badgeEl = document.querySelector("#rewardedAdModalOverlay .modal-track-badge");
+      const descEl = document.querySelector("#rewardedAdModalOverlay .modal-reward-desc");
+      const btn = document.getElementById("btnClaimAdReward");
+      const fill = document.getElementById("adProgressFill");
+      const count = document.getElementById("adCountdownSeconds");
+
+      if (titleEl) titleEl.textContent = "Sponsored Video";
+      if (badgeEl) badgeEl.textContent = "+5 EXTRA STAR TASKS";
+      if (descEl) descEl.innerHTML = "Watch this short rewarded sponsor ad to unlock <b>+5 Extra Star Tasks</b> today!";
+
+      if (modal) modal.style.display = "flex";
+      if (btn) {
+        btn.disabled = true;
+        btn.style.cursor = "not-allowed";
+        btn.textContent = "⏳ Watching Ad...";
+        btn.onclick = finishRewardedAd;
+      }
+      if (fill) fill.style.width = "0%";
+
+      const runAd = (typeof window.runRewardedAd === "function")
+        ? window.runRewardedAd()
+        : (typeof show_11677609 === "function" ? show_11677609("pop") : (typeof window.show_11677609 === "function" ? window.show_11677609("pop") : Promise.resolve({ success: true })));
+
+      let secs = 5;
+      clearInterval(adInterval);
+      adInterval = setInterval(() => {
+        secs--;
+        if (count) count.textContent = secs;
+        if (fill) fill.style.width = ((5 - secs) * 20) + "%";
+
+        if (secs <= 0) {
+          clearInterval(adInterval);
+          Promise.resolve(runAd).catch(() => {}).then(() => {
+            if (btn) {
+              btn.disabled = false;
+              btn.style.cursor = "pointer";
+              btn.style.background = "linear-gradient(155deg, #10b981 0%, #059669 100%)";
+              btn.style.color = "#ffffff";
+              btn.textContent = "Claim +5 Tasks Reward 🎁";
+            }
+          });
+        }
+      }, 1000);
+    }
+
+    function closeAdModal() {
+      const modal = document.getElementById("rewardedAdModalOverlay");
+      if (modal) modal.style.display = "none";
+      clearInterval(adInterval);
+    }
+
+    function finishRewardedAd() {
+      closeAdModal();
+      showToast("🎉 Rewarded Ad Completed! +5 Extra Tasks Unlocked!");
+    }
+
+    function navigateBack() {
+      const ref = document.referrer || "";
+      const isSelf = ref.includes("tasks/index.html") || ref.includes("page/tasks") || ref.includes("/tasks") || ref.includes("\\tasks");
+      if (ref && !isSelf && (ref.includes("/home") || ref.includes("home/index.html"))) {
+        window.location.href = ref;
+      } else if (window.history.length > 1 && !isSelf) {
+        window.history.back();
+      } else {
+        window.location.href = "../home/index.html";
+      }
+    }
+
+    let toastTimer = null;
+    function showToast(msg) {
+      const toast = document.getElementById("arcadeToast");
+      const text = document.getElementById("toastMsg");
+      if (!toast || !text) return;
+      text.textContent = msg;
+      toast.style.opacity = "1";
+      toast.style.transform = "translateX(-50%) translateY(0)";
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        toast.style.opacity = "0";
+        toast.style.transform = "translateX(-50%) translateY(12px)";
+      }, 2500);
+    }
+
+    // Initialize
+    window.addEventListener("DOMContentLoaded", () => {
+      switchCategory(state.activeTab);
+      updateHUD();
+
+      // Real-time synchronization listeners
+      window.addEventListener("storage", (e) => {
+        if (["task_game_coins", "user_coins", "task_game_stars", "user_stars", "task_user_tickets", "user_tickets", "task_pass_level", "task_game_completed_tasks"].includes(e.key)) {
+          updateHUD();
+          renderCategoryTasks();
+        }
+      });
+
+      window.addEventListener("balance:changed", () => {
+        updateHUD();
+      });
+
+      try {
+        const bSync = new BroadcastChannel("balance_sync_channel");
+        bSync.onmessage = () => updateHUD();
+      } catch(e) {}
+
+      try {
+        const syncBc = new BroadcastChannel("nova_task_sync");
+        syncBc.onmessage = (event) => {
+          updateHUD();
+          if (event.data && (event.data.type === 'TASKS_RESTORED' || event.data.type === 'TASKS_UPDATED' || event.data.type === 'TASK_COMPLETED' || event.data.type === 'TEN_TASKS_UNLOCKED')) {
+            renderCategoryTasks();
+          }
+        };
+      } catch(e) {}
+    });
+
+    // Expose helpers globally
+    window.switchCategory = switchCategory;
+    window.renderCategoryTasks = renderCategoryTasks;
+    window.updateHUD = updateHUD;
+    window.openVerifyModal = openVerifyModal;
+    window.closeVerifyModal = closeVerifyModal;
+    window.submitVerification = submitVerification;
+    window.handleOpenTask = handleOpenTask;
+    window.openTaskUrl = handleOpenTask;
+  </script>
+</body>
+</html>

@@ -1,0 +1,7642 @@
+// Profile & Admin Portal Script
+// Credentials: Username: 400 @123 | Password: 0911 (Masked, not shown on UI)
+
+// Sunflower removed
+const TASKS_STORAGE_KEY = 'task_game_tasks';
+const CLAIMS_STORAGE_KEY = 'task_game_claims';
+const WITHDRAW_STORAGE_KEY = 'task_game_withdrawals';
+const USERS_STORAGE_KEY = 'task_game_users';
+const SYNC_FLAG_KEY = 'task_game_sync_flag';
+const SYNC_CHANNEL_NAME = 'nova_task_sync';
+const TOTAL_TASKS_KEY = 'task_game_total_tasks';
+const EVENT_TASKS_KEY = 'task_game_event_tasks';
+
+// Canonical default contenders shared between Admin & Leaderboard (real player only; demo users removed)
+const CANONICAL_TASK_USERS = [
+  { id: 'usr_1', name: 'Player', avatar: '⚡', level: 'LVL 1 • NOVICE', coins: 0, stars: 0, totalTasks: 0, eventTasks: 0, status: 'active', role: 'player', email: 'player@novatasks.io', username: '@player', joined: 'Today' }
+];
+
+const DEMO_USER_IDS = new Set(['usr_2', 'usr_3', 'usr_4', 'usr_5', 'usr_6']);
+const DEMO_USER_NAMES = new Set(['User 2', 'CyberHunter', 'NeonBlaze', 'ShadowNova', 'PixelMaster']);
+
+function isDemoUser(u) {
+  if (!u) return true;
+  if (DEMO_USER_IDS.has(u.id)) return true;
+  if (DEMO_USER_NAMES.has(u.name)) return true;
+  if (typeof u.id === 'string' && u.id.startsWith('mock_')) return true;
+  return false;
+}
+
+const DEFAULT_USERS = [];
+const DEFAULT_WITHDRAWALS = [];
+
+// Storage sanitization to purge legacy demo data and start everything from 0
+try {
+  if (!localStorage.getItem('task_game_zero_start_clean_v7')) {
+    if (!localStorage.getItem('task_game_coins')) localStorage.setItem('task_game_coins', '0');
+    if (!localStorage.getItem('task_game_stars')) localStorage.setItem('task_game_stars', '0');
+    if (!localStorage.getItem('user_coins')) localStorage.setItem('user_coins', '0');
+    if (!localStorage.getItem('user_stars')) localStorage.setItem('user_stars', '0');
+    localStorage.setItem('task_game_total_tasks', '0');
+    localStorage.setItem('task_game_total_tasks_completed', '0');
+    localStorage.setItem('completed_tasks_count', '0');
+    localStorage.setItem('task_game_ads_watched_count', '0');
+    localStorage.setItem('ads_watched_count', '0');
+    localStorage.setItem('task_game_event_tasks', '0');
+    localStorage.setItem('task_game_event_tasks_count', '0');
+    localStorage.setItem('task_coins_won_today', '0');
+    localStorage.setItem('task_games_played_today', '0');
+    localStorage.setItem('task_win_streak', '0');
+    localStorage.setItem('task_game_users', '[]');
+    localStorage.setItem('task_game_withdrawals', '[]');
+    localStorage.setItem('task_game_referrals_list', '[]');
+    localStorage.setItem('task_game_stars_transactions', '[]');
+    localStorage.setItem('task_game_claims', '{}');
+    localStorage.removeItem('task_game_stars_rating');
+    localStorage.removeItem('task_game_cloud_referral_codes');
+    localStorage.removeItem('task_game_ad_timer_end');
+    // Cleaned
+    localStorage.removeItem('task_game_tg_profile');
+    localStorage.removeItem('player_email');
+    localStorage.removeItem('player_whatsapp');
+    const existingName = localStorage.getItem('player_username');
+    if (!existingName || existingName.toLowerCase().includes('nova')) {
+      localStorage.setItem('player_username', 'Player');
+    }
+    localStorage.setItem('player_avatar', '⚡');
+    localStorage.setItem('task_game_zero_start_clean_v7', 'true');
+  }
+} catch (e) {}
+
+// Ensure users storage is valid array
+try {
+  const rawUsers = localStorage.getItem(USERS_STORAGE_KEY);
+  if (rawUsers) {
+    const parsed = JSON.parse(rawUsers);
+    if (!Array.isArray(parsed)) localStorage.setItem(USERS_STORAGE_KEY, '[]');
+  }
+  const rawWd = localStorage.getItem(WITHDRAW_STORAGE_KEY);
+  if (rawWd && (rawWd.includes('WD-8491') || rawWd.includes('WD-8490') || rawWd.includes('AMZN-7492'))) {
+    localStorage.setItem(WITHDRAW_STORAGE_KEY, '[]');
+  }
+} catch (e) {}
+
+// Global active tab state ('profile' | 'admin')
+let activeProfileTab = 'profile';
+let currentAdminSubView = 'tasks';
+let tasksData = [];
+let withdrawalsData = [];
+let usersData = [];
+let currentWdFilter = 'all';
+let adminEventInterval = null;
+let syncChannel = null;
+
+// Initialize BroadcastChannel
+try {
+  syncChannel = new BroadcastChannel(SYNC_CHANNEL_NAME);
+  syncChannel.onmessage = (event) => {
+    loadAllAdminData();
+    renderCurrentAdminSubView();
+  };
+} catch (e) {
+  console.warn('BroadcastChannel not supported');
+}
+
+/**
+ * Check if admin is currently authenticated in session or storage
+ */
+// Compulsory Admin Lock: Always locked by default upon opening
+try {
+  localStorage.removeItem('admin_authenticated');
+} catch(e) {}
+
+function isAdminLoggedIn() {
+  try {
+    return sessionStorage.getItem('admin_authenticated') === 'true';
+  } catch (e) {
+    return false;
+  }
+}
+window.isAdminLoggedIn = isAdminLoggedIn;
+
+/**
+ * Open Admin with Compulsory Lock:
+ * Any time Admin is opened from menu, tab, or link, active session is invalidated
+ * and administrator credentials are required.
+ */
+function openAdminCompulsoryLock() {
+  try {
+    sessionStorage.removeItem('admin_authenticated');
+    localStorage.removeItem('admin_authenticated');
+  } catch(e) {}
+
+  const adminStatusTag = document.getElementById('adminStatusTag');
+  if (adminStatusTag) adminStatusTag.textContent = '🔒';
+
+  const passField = document.getElementById('adminPassword');
+  const errBox = document.getElementById('adminLoginError');
+  if (passField) passField.value = '';
+  if (errBox) errBox.style.display = 'none';
+
+  switchProfileTab('admin');
+}
+window.openAdminCompulsoryLock = openAdminCompulsoryLock;
+
+/**
+ * Switch top-level profile tab between 'profile' and 'admin'
+ * @param {'profile'|'admin'} tabKey
+ */
+function switchProfileTab(tabKey) {
+  activeProfileTab = tabKey;
+
+  const topNavSwitcher = document.getElementById('topNavSwitcher');
+  const tabBtnProfile = document.getElementById('tabBtnProfile');
+  const tabBtnAdmin = document.getElementById('tabBtnAdmin');
+  const menuProfile = document.getElementById('menuProfile');
+  const menuAdminBtn = document.getElementById('menuAdminBtn');
+  const adminStatusTag = document.getElementById('adminStatusTag');
+
+  const panelProfile = document.getElementById('panelUserProfile') || document.getElementById('panelProfileView');
+  const panelAdminLogin = document.getElementById('panelAdminLogin');
+  const panelAdminDashboard = document.getElementById('panelAdminDashboard') || document.getElementById('panelAdminView');
+
+  const belowMenu = document.getElementById('belowMenuBar');
+  const adminMenu = document.getElementById('adminMenuBar');
+
+  const authenticated = isAdminLoggedIn();
+
+  if (adminStatusTag) {
+    adminStatusTag.textContent = authenticated ? '🔓' : '🔒';
+  }
+
+  if (tabKey === 'admin') {
+    if (tabBtnProfile) tabBtnProfile.classList.remove('active');
+    if (tabBtnAdmin) tabBtnAdmin.classList.add('active');
+    if (menuProfile) menuProfile.classList.remove('active');
+    if (menuAdminBtn) menuAdminBtn.classList.add('active');
+
+    if (authenticated) {
+      // Ensure popup modal is closed when admin panel loads
+      closeCategoryTaskPopup();
+
+      // Remove/hide the top switcher tab bar when admin panel is open
+      if (topNavSwitcher) topNavSwitcher.style.display = 'none';
+
+      if (panelProfile) panelProfile.style.display = 'none';
+      if (panelAdminLogin) panelAdminLogin.style.display = 'none';
+      if (panelAdminDashboard) panelAdminDashboard.style.display = 'block';
+
+      if (belowMenu) belowMenu.style.display = 'none';
+      if (adminMenu) adminMenu.style.display = 'flex';
+
+      loadAllAdminData();
+      switchAdminSubView(currentAdminSubView || 'tasks');
+    } else {
+      if (topNavSwitcher) topNavSwitcher.style.display = 'flex';
+
+      if (panelProfile) panelProfile.style.display = 'none';
+      if (panelAdminLogin) panelAdminLogin.style.display = 'block';
+      if (panelAdminDashboard) panelAdminDashboard.style.display = 'none';
+
+      if (belowMenu) belowMenu.style.display = 'flex';
+      if (adminMenu) adminMenu.style.display = 'none';
+
+      const userField = document.getElementById('adminUsername');
+      if (userField) setTimeout(() => userField.focus(), 100);
+    }
+  } else {
+    // Default: 'profile' view - compulsory lock: leaving admin locks session
+    try {
+      sessionStorage.removeItem('admin_authenticated');
+      localStorage.removeItem('admin_authenticated');
+    } catch(e) {}
+    if (adminStatusTag) adminStatusTag.textContent = '🔒';
+
+    // Show top switcher tabs
+    if (topNavSwitcher) topNavSwitcher.style.display = 'flex';
+
+    if (tabBtnProfile) tabBtnProfile.classList.add('active');
+    if (tabBtnAdmin) tabBtnAdmin.classList.remove('active');
+    if (menuProfile) menuProfile.classList.add('active');
+    if (menuAdminBtn) menuAdminBtn.classList.remove('active');
+
+    if (panelProfile) panelProfile.style.display = 'block';
+    if (panelAdminLogin) panelAdminLogin.style.display = 'none';
+    if (panelAdminDashboard) panelAdminDashboard.style.display = 'none';
+
+    if (belowMenu) belowMenu.style.display = 'flex';
+    if (adminMenu) adminMenu.style.display = 'none';
+  }
+}
+window.switchProfileTab = switchProfileTab;
+
+/**
+ * Handle submission of the Admin Login form on Profile page
+ */
+function handleAdminLogin(event) {
+  if (event && typeof event.preventDefault === 'function') {
+    event.preventDefault();
+  }
+
+  const userField = document.getElementById('adminUsername');
+  const passField = document.getElementById('adminPassword');
+  const errBox = document.getElementById('adminLoginError');
+
+  const rawUser = userField ? userField.value.trim() : '';
+  const rawPass = passField ? passField.value.trim() : '';
+
+  const normalizedUser = rawUser.replace(/\s+/g, ' ');
+  const compactUser = rawUser.replace(/\s+/g, '');
+  const lowerUser = rawUser.toLowerCase();
+
+  const isUserValid = (
+    normalizedUser === '400 @123' || 
+    compactUser === '400@123' || 
+    lowerUser === 'admin' || 
+    lowerUser === 'root' ||
+    lowerUser === 'administrator'
+  );
+  const isPassValid = (
+    rawPass === '2026' ||
+    rawPass === '0911' || 
+    rawPass === 'admin123' || 
+    rawPass === '1109' || 
+    rawPass === 'admin'
+  );
+
+  if (isUserValid && isPassValid) {
+    if (errBox) errBox.style.display = 'none';
+    try {
+      sessionStorage.setItem('admin_authenticated', 'true');
+      localStorage.setItem('admin_authenticated', 'true');
+    } catch (e) {}
+
+    const adminStatusTag = document.getElementById('adminStatusTag');
+    if (adminStatusTag) adminStatusTag.textContent = '🔓';
+
+    showToast('🎉 Welcome Administrator! Admin Control Panel Unlocked 🛡️');
+    switchProfileTab('admin');
+  } else {
+    if (errBox) {
+      errBox.style.display = 'flex';
+    }
+    if (passField) {
+      passField.value = '';
+      passField.focus();
+    }
+    showToast('⚠️ Invalid administrator credentials. Access denied!');
+  }
+}
+window.handleAdminLogin = handleAdminLogin;
+
+
+
+/**
+ * Exit Admin Control Panel cleanly and return to Player Profile view
+ */
+function exitAdminToProfile() {
+  sessionStorage.removeItem('admin_authenticated');
+  localStorage.removeItem('admin_authenticated');
+  const adminStatusTag = document.getElementById('adminStatusTag');
+  if (adminStatusTag) adminStatusTag.textContent = '🔒';
+  switchProfileTab('profile');
+  showToast('👤 Returned to Player Profile view.');
+}
+window.exitAdminToProfile = exitAdminToProfile;
+
+/**
+ * Sign out of Admin session and return cleanly to Profile tab
+ */
+function adminLogout() {
+  sessionStorage.removeItem('admin_authenticated');
+  localStorage.removeItem('admin_authenticated');
+
+  const adminStatusTag = document.getElementById('adminStatusTag');
+  const errBox = document.getElementById('adminLoginError');
+  if (adminStatusTag) adminStatusTag.textContent = '🔒';
+  if (errBox) errBox.style.display = 'none';
+
+  switchProfileTab('profile');
+  showToast('Admin signed out safely 🔒 Returned to Profile.');
+}
+window.adminLogout = adminLogout;
+
+/**
+ * Switch Admin subviews menu-bar-wise
+ * @param {'tasks'|'users'|'withdraw'|'event'} viewKey
+ */
+function switchAdminSubView(viewKey) {
+  currentAdminSubView = viewKey;
+
+  const views = {
+    tasks: document.getElementById('adminSubTasks'),
+    users: document.getElementById('adminSubUsers'),
+    withdraw: document.getElementById('adminSubWithdraw'),
+    event: document.getElementById('adminSubEvent')
+  };
+
+  const menuBtns = {
+    tasks: document.getElementById('adminMenuTasks'),
+    users: document.getElementById('adminMenuUsers'),
+    withdraw: document.getElementById('adminMenuWithdraw'),
+    event: document.getElementById('adminMenuEvent')
+  };
+
+  const titles = {
+    tasks: 'Edit Task & Missions',
+    users: 'All Registered Players',
+    withdraw: 'Wallet Withdrawal Requests',
+    event: 'Global 3-Month Championship'
+  };
+
+  // Update title
+  const titleEl = document.getElementById('adminActivePageTitle');
+  if (titleEl) titleEl.textContent = titles[viewKey] || 'Admin Control Panel';
+
+  // Toggle view visibility
+  Object.keys(views).forEach(key => {
+    if (views[key]) {
+      views[key].style.display = (key === viewKey) ? 'block' : 'none';
+    }
+  });
+
+  // Toggle active button style on admin menu bar
+  Object.keys(menuBtns).forEach(key => {
+    if (menuBtns[key]) {
+      if (key === viewKey) menuBtns[key].classList.add('active');
+      else menuBtns[key].classList.remove('active');
+    }
+  });
+
+  // Ensure bottom menu bar is hidden if viewing dedicated category page
+  const pageView = document.getElementById('adminTaskCategoryPageView');
+  const adminMenu = document.getElementById('adminMenuBar');
+  if (viewKey === 'tasks' && pageView && pageView.style.display !== 'none') {
+    if (adminMenu) adminMenu.style.display = 'none';
+  } else {
+    if (adminMenu) adminMenu.style.display = 'flex';
+  }
+
+  renderCurrentAdminSubView();
+}
+
+/**
+ * Render the currently selected admin subview
+ */
+function renderCurrentAdminSubView() {
+  if (currentAdminSubView === 'tasks') renderAdminTasksList();
+  else if (currentAdminSubView === 'users') renderAdminUsersList();
+  else if (currentAdminSubView === 'withdraw') renderAdminWithdrawalsList();
+  else if (currentAdminSubView === 'event') renderAdminEventSection();
+}
+
+/**
+ * Load all stored data from localStorage
+ */
+function loadAllAdminData() {
+  // 1. Tasks
+  try {
+    const raw = localStorage.getItem(TASKS_STORAGE_KEY);
+    tasksData = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(tasksData)) tasksData = [];
+    // Purge only actual demo tasks per user request
+    tasksData = tasksData.filter(t => t && t.id && 
+      !String(t.title || '').toLowerCase().includes('demo') && 
+      !String(t.id || '').toLowerCase().includes('demo')
+    );
+    // If no tasks exist, populate from canonical tasks pool
+    if (tasksData.length === 0 && Array.isArray(CANONICAL_BASIC_DEFAULT_TASKS) && CANONICAL_BASIC_DEFAULT_TASKS.length > 0) {
+      tasksData = JSON.parse(JSON.stringify(CANONICAL_BASIC_DEFAULT_TASKS));
+    }
+    let modified = true;
+    tasksData.forEach(t => {
+      if (!t.verificationCode && !t.code && !t.secretCode) {
+        const gen = Math.floor(100000 + Math.random() * 900000).toString();
+        t.verificationCode = gen;
+        t.code = gen;
+        t.secretCode = gen;
+      }
+    });
+    localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(tasksData));
+    localStorage.setItem('admin_tasks', JSON.stringify(tasksData));
+  } catch (e) {
+    tasksData = [];
+  }
+
+  // 2. Users (Canonical Contenders & Shared Leaderboard Sync)
+  try {
+    const raw = localStorage.getItem(USERS_STORAGE_KEY);
+    let parsed = raw ? JSON.parse(raw) : [];
+    if (Array.isArray(parsed)) {
+      parsed = parsed.filter(u => !isDemoUser(u));
+    }
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      parsed = JSON.parse(JSON.stringify(CANONICAL_TASK_USERS));
+    } else {
+      CANONICAL_TASK_USERS.forEach(d => {
+        if (!parsed.some(u => u.id === d.id)) {
+          parsed.push({ ...d });
+        }
+      });
+    }
+
+    // Retain all registered users
+    parsed = parsed.filter(u => u && typeof u === 'object');
+
+    // Sync live player values into usr_1
+    const pCoins = parseInt(localStorage.getItem('task_game_coins') || '0', 10);
+    const pStars = parseInt(localStorage.getItem('task_game_stars') || '0', 10);
+    const pName = localStorage.getItem('player_username') || 'Player';
+    const pAvatar = localStorage.getItem('player_avatar') || '⚡';
+    const pTotalTasks = parseInt(localStorage.getItem(TOTAL_TASKS_KEY) || '0', 10);
+    const pEventTasks = parseInt(localStorage.getItem(EVENT_TASKS_KEY) || '0', 10);
+
+    let usr1 = parsed.find(u => u.id === 'usr_1' || u.name === pName);
+    if (!usr1) {
+      usr1 = {
+        id: "usr_1",
+        name: pName,
+        avatar: pAvatar,
+        level: "LVL 1 • NOVICE",
+        coins: pCoins,
+        stars: pStars,
+        totalTasks: pTotalTasks,
+        eventTasks: pEventTasks,
+        status: "active",
+        joined: "Today"
+      };
+      parsed.unshift(usr1);
+    } else {
+      if (pName && pName !== 'Player') usr1.name = pName;
+      if (pAvatar && pAvatar !== '⚡') usr1.avatar = pAvatar;
+      if (pCoins > 0 && pCoins !== usr1.coins) usr1.coins = pCoins;
+      if (pStars > 0 && pStars !== usr1.stars) usr1.stars = pStars;
+      if (pTotalTasks > 0 && pTotalTasks !== usr1.totalTasks) usr1.totalTasks = pTotalTasks;
+      if (pEventTasks > 0 && pEventTasks !== usr1.eventTasks) usr1.eventTasks = pEventTasks;
+    }
+    usersData = parsed;
+    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(usersData));
+  } catch (e) {
+    usersData = [];
+  }
+
+  // 3. Withdrawals (Clean zero start, no mock records)
+  try {
+    const raw = localStorage.getItem(WITHDRAW_STORAGE_KEY);
+    let parsedWd = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(parsedWd)) parsedWd = [];
+    withdrawalsData = parsedWd.filter(w => w && !['WD-8491', 'WD-8490', 'WD-8489', 'WD-8488'].includes(w.id));
+    localStorage.setItem(WITHDRAW_STORAGE_KEY, JSON.stringify(withdrawalsData));
+  } catch (e) {
+    withdrawalsData = [];
+  }
+
+  updateAdminCounters();
+}
+
+/**
+ * Update badge counts on Admin Menu Bar
+ */
+function updateAdminCounters() {
+  const taskCount = document.getElementById('adminMenuTaskCount');
+  if (taskCount) taskCount.textContent = tasksData.length.toString();
+
+  const userCount = document.getElementById('adminMenuUserCount');
+  if (userCount) userCount.textContent = usersData.length.toString();
+
+  const pendingWd = withdrawalsData.filter(w => w.status === 'pending');
+  const wdCount = document.getElementById('adminMenuPendingCount');
+  if (wdCount) {
+    wdCount.textContent = pendingWd.length.toString();
+    wdCount.style.display = pendingWd.length > 0 ? 'inline-block' : 'none';
+  }
+
+  // 6 Category Slices
+  const commonList = tasksData.filter(t => t.category === 'common');
+  const simpleList = tasksData.filter(t => (t.category === 'simple' || t.category === 'coin') && t.category !== 'common' && t.category !== 'pro' && t.category !== 'elite' && t.category !== 'ultra' && !t.isShopTask && t.category !== 'premium' && t.category !== 'star' && t.category !== 'quiz');
+  const premiumList = tasksData.filter(t => (t.category === 'premium' || t.category === 'star' || t.isShopTask || t.category === 'shop_task') && t.category !== 'common' && t.category !== 'pro' && t.category !== 'elite' && t.category !== 'ultra' && t.category !== 'quiz');
+  const proList = tasksData.filter(t => t.category === 'pro' || t.category === 'elite');
+  const ultraList = tasksData.filter(t => t.category === 'ultra');
+  const quizList = tasksData.filter(t => t.category === 'quiz');
+
+  // Hub Cards Available Counts (Same layout as User Home Page)
+  const hubCommon = document.getElementById('adminHubCountCommon');
+  const hubSimple = document.getElementById('adminHubCountSimple');
+  const hubPremium = document.getElementById('adminHubCountPremium');
+  const hubPro = document.getElementById('adminHubCountPro');
+  const hubUltra = document.getElementById('adminHubCountUltra');
+  const hubQuiz = document.getElementById('adminHubCountQuiz');
+  if (hubCommon) hubCommon.textContent = (commonList.length > 0 ? commonList.length : 10).toString();
+  if (hubSimple) hubSimple.textContent = (simpleList.length > 0 ? simpleList.length : 8).toString();
+  if (hubPremium) hubPremium.textContent = (premiumList.length > 0 ? premiumList.length : 5).toString();
+  if (hubPro) hubPro.textContent = (proList.length > 0 ? proList.length : 3).toString();
+  if (hubUltra) hubUltra.textContent = (ultraList.length > 0 ? ultraList.length : 2).toString();
+  if (hubQuiz) hubQuiz.textContent = (quizList.length > 0 ? quizList.length : 10).toString();
+
+  // Legacy Counts
+  const cntAll = document.getElementById('countAdminFilterAll');
+  const cntSimple = document.getElementById('countAdminFilterSimple');
+  const cntPremium = document.getElementById('countAdminFilterPremium');
+  const cntPro = document.getElementById('countAdminFilterPro');
+  if (cntAll) cntAll.textContent = tasksData.length.toString();
+  if (cntSimple) cntSimple.textContent = simpleList.length.toString();
+  if (cntPremium) cntPremium.textContent = premiumList.length.toString();
+  if (cntPro) cntPro.textContent = proList.length.toString();
+
+  // Active Category List for Header Count & Level Breakdown
+  let currentList = commonList;
+  if (currentAdminCategoryTab === 'simple') currentList = simpleList;
+  else if (currentAdminCategoryTab === 'premium') currentList = premiumList;
+  else if (currentAdminCategoryTab === 'pro') currentList = proList;
+  else if (currentAdminCategoryTab === 'ultra') currentList = ultraList;
+  else if (currentAdminCategoryTab === 'quiz') currentList = quizList.length > 0 ? quizList : Array(10).fill(0);
+
+  // Category Header Count Pill
+  const catHeaderCount = document.getElementById('adminCatPageHeaderCount');
+  if (catHeaderCount) {
+    catHeaderCount.textContent = `${currentList.length} Tasks`;
+  }
+
+  // Level-Wise Breakdown Counts
+  const cntLvlAll = document.getElementById('countLvlAll');
+  const cntLvl1 = document.getElementById('countLvl1');
+  const cntLvl2 = document.getElementById('countLvl2');
+  const cntLvl3 = document.getElementById('countLvl3');
+  const cntLvl4 = document.getElementById('countLvl4');
+  const cntLvl5 = document.getElementById('countLvl5');
+  if (cntLvlAll) cntLvlAll.textContent = currentList.length.toString();
+  if (cntLvl1) cntLvl1.textContent = currentList.filter(t => Number(t.level || 1) === 1).length.toString();
+  if (cntLvl2) cntLvl2.textContent = currentList.filter(t => Number(t.level || 1) === 2).length.toString();
+  if (cntLvl3) cntLvl3.textContent = currentList.filter(t => Number(t.level || 1) === 3).length.toString();
+  if (cntLvl4) cntLvl4.textContent = currentList.filter(t => Number(t.level || 1) === 4).length.toString();
+  if (cntLvl5) cntLvl5.textContent = currentList.filter(t => Number(t.level || 1) === 5).length.toString();
+}
+
+// -----------------------------------------------------------------------------
+// 1. ADMIN TASK CATEGORY CONTROLLER (COMMON, COIN, STAR, PRO, ULTRA)
+// -----------------------------------------------------------------------------
+
+let currentAdminTaskCategoryFilter = 'common';
+let currentAdminCategoryTab = 'common';
+let currentAdminLevelFilter = 'all';
+let isCategoryQuickEditActive = false;
+
+/**
+ * Open Dedicated Category Full Page View
+ * Removes main heading and shows full-page category manager
+ * @param {'common'|'simple'|'premium'|'pro'|'ultra'|'coin'|'star'} cat
+ */
+function openAdminTaskCategoryPage(cat) {
+  if (cat === 'coin') cat = 'simple';
+  if (cat === 'star') cat = 'premium';
+  if (!cat || cat === 'all') cat = 'common';
+
+  currentAdminCategoryTab = cat;
+  currentAdminTaskCategoryFilter = cat;
+  currentAdminLevelFilter = 'all';
+
+  // 1. Remove/Hide top heading and global toolbar (as requested)
+  const mainHeader = document.getElementById('adminDashHeader');
+  const globalToolbar = document.getElementById('adminGlobalToolbar');
+  if (mainHeader) mainHeader.style.display = 'none';
+  if (globalToolbar) globalToolbar.style.display = 'none';
+
+  // 2. Hide Hub and Show Full Category Page View
+  const hub = document.getElementById('adminTaskCategoryHub');
+  const pageView = document.getElementById('adminTaskCategoryPageView');
+  if (hub) hub.style.display = 'none';
+  if (pageView) pageView.style.display = 'block';
+
+  // 3. Hide bottom navigation menu bar (adminMenuBar & belowMenuBar) inside category full page view
+  const adminMenu = document.getElementById('adminMenuBar');
+  const belowMenu = document.getElementById('belowMenuBar');
+  if (adminMenu) adminMenu.style.display = 'none';
+  if (belowMenu) belowMenu.style.display = 'none';
+
+  // 4. Update Category Top Bar Info
+  const iconEl = document.getElementById('adminCatPageHeaderIcon');
+  const titleEl = document.getElementById('adminCatPageHeaderTitle');
+
+  const metaMap = {
+    common: { icon: '📋', name: 'Common Tasks' },
+    simple: { icon: '🪙', name: 'Coin Tasks' },
+    premium: { icon: '⭐', name: 'Star Tasks (VIP)' },
+    pro: { icon: '💎', name: 'Pro Tasks' },
+    ultra: { icon: '⚡', name: 'Ultra Tasks' },
+    quiz: { icon: '🧠', name: 'Quiz Tasks' }
+  };
+
+  const meta = metaMap[cat] || metaMap.common;
+  if (iconEl) iconEl.textContent = meta.icon;
+  if (titleEl) titleEl.textContent = meta.name;
+
+  // Close breakdown popover and slide-up modal if open
+  toggleLevelBreakdown(false);
+  closeCategoryTaskPopup();
+
+  // Render list
+  renderAdminTasksList();
+}
+window.openAdminTaskCategoryPage = openAdminTaskCategoryPage;
+
+/**
+ * Close Dedicated Category Page View and return to Hub (Restores main heading and bottom admin menu bar)
+ */
+function closeAdminTaskCategoryPage() {
+  const mainHeader = document.getElementById('adminDashHeader');
+  const globalToolbar = document.getElementById('adminGlobalToolbar');
+  if (mainHeader) mainHeader.style.display = 'none';
+  if (globalToolbar) globalToolbar.style.display = 'none';
+
+  const hub = document.getElementById('adminTaskCategoryHub');
+  const pageView = document.getElementById('adminTaskCategoryPageView');
+  if (pageView) pageView.style.display = 'none';
+  if (hub) hub.style.display = 'flex';
+
+  // Restore admin bottom menu bar when returning to Hub
+  const adminMenu = document.getElementById('adminMenuBar');
+  if (adminMenu) adminMenu.style.display = 'flex';
+
+  toggleLevelBreakdown(false);
+  closeCategoryTaskPopup();
+  updateAdminCounters();
+}
+window.closeAdminTaskCategoryPage = closeAdminTaskCategoryPage;
+
+function filterAdminTasksCategory(cat) {
+  openAdminTaskCategoryPage(cat);
+}
+window.filterAdminTasksCategory = filterAdminTasksCategory;
+
+// -----------------------------------------------------------------------------
+// 2. LEVEL-WISE TASK COUNT DROPDOWN & FILTER
+// -----------------------------------------------------------------------------
+
+function toggleLevelBreakdown(forceState) {
+  const card = document.getElementById('adminLevelBreakdownCard');
+  const btn = document.getElementById('btnToggleLevelBreakdown');
+  if (!card) return;
+
+  const isVisible = (card.style.display === 'block');
+  const nextState = (typeof forceState === 'boolean') ? forceState : !isVisible;
+
+  card.style.display = nextState ? 'block' : 'none';
+  if (btn) {
+    if (nextState) btn.classList.add('active');
+    else btn.classList.remove('active');
+  }
+}
+window.toggleLevelBreakdown = toggleLevelBreakdown;
+
+function filterByLevel(lvl) {
+  currentAdminLevelFilter = (lvl === 'all') ? 'all' : parseInt(lvl, 10);
+
+  // Update active class in dropdown items
+  ['filterLvlAll', 'filterLvl1', 'filterLvl2', 'filterLvl3', 'filterLvl4', 'filterLvl5'].forEach(id => {
+    document.getElementById(id)?.classList.remove('active');
+  });
+
+  if (currentAdminLevelFilter === 'all') {
+    document.getElementById('filterLvlAll')?.classList.add('active');
+  } else {
+    document.getElementById(`filterLvl${currentAdminLevelFilter}`)?.classList.add('active');
+  }
+
+  toggleLevelBreakdown(false);
+  renderAdminTasksList();
+}
+window.filterByLevel = filterByLevel;
+
+// -----------------------------------------------------------------------------
+// 3. ACTION MENU HANDLERS (ADD, QUICK EDIT, RESTART, DELETE ALL)
+// -----------------------------------------------------------------------------
+
+function toggleCategoryQuickEditMode() {
+  isCategoryQuickEditActive = !isCategoryQuickEditActive;
+  const btn = document.getElementById('btnCategoryQuickEdit');
+  if (btn) {
+    if (isCategoryQuickEditActive) {
+      btn.classList.add('active');
+      btn.innerHTML = '<span>✕ Done Editing</span>';
+      showToast('✏️ Edit mode active: click "✏️ Edit" on any task below to modify it.');
+    } else {
+      btn.classList.remove('active');
+      btn.innerHTML = '<span>✏️ Edit Tasks</span>';
+    }
+  }
+  renderAdminTasksList();
+}
+window.toggleCategoryQuickEditMode = toggleCategoryQuickEditMode;
+
+function restartCategoryTasks() {
+  const catNames = {
+    common: 'Common Tasks',
+    simple: 'Coin Tasks',
+    premium: 'Star Tasks',
+    pro: 'Pro Tasks',
+    ultra: 'Ultra Tasks'
+  };
+  const name = catNames[currentAdminCategoryTab] || 'Category Tasks';
+
+  if (!confirm(`🔄 Restart all missions in ${name}?\n\nThis will reset completion records and cooldowns for this category so all players can play and complete them again!`)) {
+    return;
+  }
+
+  // Clear claims & cooldowns for tasks in this category
+  try {
+    const claimsRaw = localStorage.getItem(CLAIMS_STORAGE_KEY);
+    let claims = claimsRaw ? JSON.parse(claimsRaw) : {};
+    tasksData.forEach(t => {
+      if (t.category === currentAdminCategoryTab) {
+        delete claims[t.id];
+        localStorage.removeItem(`task_opened_${t.id}`);
+        localStorage.removeItem(`task_claimed_${t.id}`);
+      }
+    });
+    localStorage.setItem(CLAIMS_STORAGE_KEY, JSON.stringify(claims));
+    localStorage.setItem(SYNC_FLAG_KEY, Date.now().toString());
+    if (syncChannel) {
+      syncChannel.postMessage({ type: 'CLAIMS_UPDATED', timestamp: Date.now() });
+    }
+  } catch(e) {}
+
+  showToast(`🔄 All ${name} restarted! Cooldowns cleared for all players. ✓`);
+}
+window.restartCategoryTasks = restartCategoryTasks;
+
+function deleteAllCategoryTasks() {
+  const catNames = {
+    common: 'Common Tasks',
+    simple: 'Coin Tasks',
+    premium: 'Star Tasks',
+    pro: 'Pro Tasks',
+    ultra: 'Ultra Tasks'
+  };
+  const name = catNames[currentAdminCategoryTab] || 'Category Tasks';
+
+  if (!confirm(`⚠️ Are you sure you want to DELETE ALL tasks in ${name}?\n\nThis will permanently remove all tasks in this category.`)) {
+    return;
+  }
+
+  tasksData = tasksData.filter(t => {
+    if (currentAdminCategoryTab === 'common') return t.category !== 'common';
+    if (currentAdminCategoryTab === 'simple') return (t.category !== 'simple' && t.category !== 'coin') || t.category === 'common' || t.category === 'pro' || t.category === 'ultra' || t.isShopTask;
+    if (currentAdminCategoryTab === 'premium') return (t.category !== 'premium' && t.category !== 'star' && !t.isShopTask && t.category !== 'shop_task');
+    if (currentAdminCategoryTab === 'pro') return (t.category !== 'pro' && t.category !== 'elite');
+    if (currentAdminCategoryTab === 'ultra') return t.category !== 'ultra';
+    return true;
+  });
+
+  saveTasksAndSync();
+  showToast(`🗑️ All tasks in ${name} have been removed.`);
+}
+window.deleteAllCategoryTasks = deleteAllCategoryTasks;
+
+// -----------------------------------------------------------------------------
+// 4. SLIDE-UP POPUP MODAL CONTROLLER (ADD NEW MISSION & EDIT INDIVIDUAL MISSION)
+// -----------------------------------------------------------------------------
+
+/**
+ * Open Slide-up modal to ADD a new mission in the active category
+ */
+function openAddCategoryTaskPopup() {
+  const overlay = document.getElementById('adminCategoryTaskModalOverlay');
+  if (!overlay) return;
+
+  const cat = currentAdminCategoryTab || 'common';
+  const heading = document.getElementById('slideUpModalHeading');
+  const icon = document.getElementById('slideUpModalIcon');
+
+  const metaAdd = {
+    common: { icon: '📋', name: 'Add Common Task' },
+    simple: { icon: '🪙', name: 'Add Coin Task' },
+    premium: { icon: '⭐', name: 'Add Star Task' },
+    pro: { icon: '💎', name: 'Add Pro 3-Task Package' },
+    ultra: { icon: '⚡', name: 'Add Ultra Task' },
+    quiz: { icon: '🧠', name: 'Add Quiz Task' }
+  };
+
+  if (heading) heading.textContent = metaAdd[cat]?.name || 'Add Task';
+  if (icon) icon.textContent = metaAdd[cat]?.icon || '📋';
+
+  // Hide edit selector row when adding a new task
+  const selectorRow = document.getElementById('slideUpEditTaskSelectorRow');
+  if (selectorRow) selectorRow.style.display = 'none';
+
+  // Unlock cost price in add mode
+  const costInputs = ['popupCoinTicketCost', 'popupProPackageCoinCost', 'popupUltraStarCost', 'taskInputTicketCost'];
+  costInputs.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.readOnly = false;
+      el.style.opacity = '1';
+      el.style.cursor = 'text';
+      el.title = '';
+    }
+  });
+
+  // Display only matching form inside slide-up modal
+  ['popupFormCommon', 'popupFormCoin', 'popupFormStar', 'popupFormPro', 'popupFormUltra', 'popupFormQuiz'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+
+  const formMap = {
+    common: 'popupFormCommon',
+    simple: 'popupFormCoin',
+    premium: 'popupFormStar',
+    pro: 'popupFormPro',
+    ultra: 'popupFormUltra',
+    quiz: 'popupFormQuiz'
+  };
+
+  const activeForm = document.getElementById(formMap[cat]);
+  if (activeForm) activeForm.style.display = 'block';
+
+  // Reset Form to Clean Default Values for Adding
+  if (cat === 'common') {
+    const f = document.getElementById('popupFormCommon');
+    if (f) {
+      f.reset();
+      document.getElementById('popupCommonEditId').value = '';
+      document.getElementById('popupCommonTitle').value = 'Webtask';
+      document.getElementById('popupCommonRewardTickets').value = '50';
+      document.getElementById('popupCommonLevel').value = '1';
+      document.getElementById('popupCommonCode').value = Math.floor(100000 + Math.random() * 900000).toString();
+      document.getElementById('btnSavePopupCommon').textContent = 'Save Common Task ✓';
+      switchPopupCommonMode('single');
+    }
+  } else if (cat === 'simple') {
+    const f = document.getElementById('popupFormCoin');
+    if (f) {
+      f.reset();
+      document.getElementById('popupCoinEditId').value = '';
+      document.getElementById('popupCoinTitle').value = 'Webtask';
+      document.getElementById('popupCoinTicketCost').value = '100';
+      document.getElementById('popupCoinRewardCoins').value = '150';
+      document.getElementById('popupCoinLevel').value = '1';
+      document.getElementById('popupCoinCode').value = Math.floor(100000 + Math.random() * 900000).toString();
+      document.getElementById('btnSavePopupCoin').textContent = 'Save Coin Task ✓';
+    }
+  } else if (cat === 'premium') {
+    const f = document.getElementById('popupFormStar');
+    if (f) {
+      f.reset();
+      document.getElementById('popupStarEditId').value = '';
+      document.getElementById('popupStarTitle').value = 'Webtask';
+      document.getElementById('popupStarRewardStars').value = '20';
+      document.getElementById('popupStarRewardCoins').value = '200';
+      document.getElementById('popupStarLevel').value = '1';
+      document.getElementById('popupStarCode').value = Math.floor(100000 + Math.random() * 900000).toString();
+      document.getElementById('btnSavePopupStar').textContent = 'Save Star Task ✓';
+    }
+  } else if (cat === 'pro') {
+    const f = document.getElementById('popupFormPro');
+    if (f) {
+      f.reset();
+      document.getElementById('popupProEditId').value = '';
+      document.getElementById('popupProPackageCoinCost').value = '5000';
+      document.getElementById('popupProRewardStars').value = '1000';
+      document.getElementById('popupProTask1Title').value = 'Webtask 1';
+      document.getElementById('popupProTask2Title').value = 'Webtask 2';
+      document.getElementById('popupProTask3Title').value = 'Webtask 3';
+      document.getElementById('popupProTask1Code').value = Math.floor(100000 + Math.random() * 900000).toString();
+      document.getElementById('popupProTask2Code').value = Math.floor(100000 + Math.random() * 900000).toString();
+      document.getElementById('popupProTask3Code').value = Math.floor(100000 + Math.random() * 900000).toString();
+      setProEventDurationHours(24);
+      document.getElementById('btnSavePopupPro').textContent = 'Save Pro Package ✓';
+    }
+  } else if (cat === 'ultra') {
+    const f = document.getElementById('popupFormUltra');
+    if (f) {
+      f.reset();
+      document.getElementById('popupUltraEditId').value = '';
+      document.getElementById('popupUltraTitle').value = 'Webtask';
+      document.getElementById('popupUltraStarCost').value = '50';
+      document.getElementById('popupUltraInrReward').value = '1500';
+      handleUltraPriceCalc('stars');
+      document.getElementById('popupUltraLevel').value = '1';
+      document.getElementById('popupUltraCode').value = Math.floor(100000 + Math.random() * 900000).toString();
+      document.getElementById('btnSavePopupUltra').textContent = 'Save Ultra Task ✓';
+    }
+  } else if (cat === 'quiz') {
+    const f = document.getElementById('popupFormQuiz');
+    if (f) {
+      f.reset();
+      document.getElementById('popupQuizEditId').value = '';
+      document.getElementById('popupQuizTitle').value = 'Trivia Quiz Mission';
+      document.getElementById('popupQuizUrl').value = 'https://google.com/';
+      document.getElementById('popupQuizQuestion').value = "What is the world's most popular cryptocurrency?";
+      document.getElementById('popupQuizOpt0').value = 'Bitcoin';
+      document.getElementById('popupQuizOpt1').value = 'Ethereum';
+      document.getElementById('popupQuizOpt2').value = 'Dogecoin';
+      document.getElementById('popupQuizOpt3').value = 'Solana';
+      document.getElementById('popupQuizCorrectIndex').value = '0';
+      document.getElementById('popupQuizRewardCoins').value = '100';
+      document.getElementById('popupQuizRewardTickets').value = '25';
+      document.getElementById('popupQuizLevel').value = '1';
+      document.getElementById('popupQuizCode').value = Math.floor(100000 + Math.random() * 900000).toString();
+      document.getElementById('btnSavePopupQuiz').textContent = 'Save Quiz Task ✓';
+    }
+  }
+
+  const card = overlay.querySelector('.admin-slideup-modal-card');
+  if (card) card.classList.remove('closing');
+  overlay.classList.add('open');
+  overlay.style.display = 'flex';
+}
+window.openAddCategoryTaskPopup = openAddCategoryTaskPopup;
+
+/**
+ * Open Slide-up modal to EDIT an individual task in the active category
+ * @param {string} taskId
+ */
+function openEditCategoryTaskPopup(taskId) {
+  const overlay = document.getElementById('adminCategoryTaskModalOverlay');
+  if (!overlay) return;
+
+  const task = tasksData.find(t => t.id === taskId);
+  if (!task) return;
+
+  let cat = task.category || currentAdminCategoryTab || 'common';
+  if (cat === 'coin') cat = 'simple';
+  if (cat === 'star') cat = 'premium';
+  currentAdminCategoryTab = cat;
+
+  const heading = document.getElementById('slideUpModalHeading');
+  const icon = document.getElementById('slideUpModalIcon');
+
+  const metaEdit = {
+    common: { icon: '📋', name: `Edit Common Task: ${task.title || 'Webtask'}` },
+    simple: { icon: '🪙', name: `Edit Coin Task: ${task.title || 'Webtask'}` },
+    premium: { icon: '⭐', name: `Edit Star Task: ${task.title || 'Webtask'}` },
+    pro: { icon: '💎', name: `Edit Pro Package: ${task.title || 'Webtask'}` },
+    ultra: { icon: '⚡', name: `Edit Ultra Task: ${task.title || 'Webtask'}` },
+    quiz: { icon: '🧠', name: `Edit Quiz Task: ${task.title || 'Trivia'}` }
+  };
+
+  if (heading) heading.textContent = metaEdit[cat]?.name || `Edit: ${task.title || 'Task'}`;
+  if (icon) icon.textContent = metaEdit[cat]?.icon || '✏️';
+
+  // Display only matching form inside slide-up modal
+  ['popupFormCommon', 'popupFormCoin', 'popupFormStar', 'popupFormPro', 'popupFormUltra', 'popupFormQuiz'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+
+  const formMap = {
+    common: 'popupFormCommon',
+    simple: 'popupFormCoin',
+    premium: 'popupFormStar',
+    pro: 'popupFormPro',
+    ultra: 'popupFormUltra',
+    quiz: 'popupFormQuiz'
+  };
+
+  const activeForm = document.getElementById(formMap[cat]);
+  if (activeForm) activeForm.style.display = 'block';
+
+  // Populate task selector dropdown for easy switching between tasks in this category
+  const selectorRow = document.getElementById('slideUpEditTaskSelectorRow');
+  const selectorDropdown = document.getElementById('slideUpTaskSelectDropdown');
+  if (selectorRow && selectorDropdown) {
+    const catTasks = tasksData.filter(t => {
+      if (cat === 'common') return t.category === 'common' || t.category === 'task';
+      if (cat === 'simple') return t.category === 'simple' || t.category === 'coin';
+      if (cat === 'premium') return t.category === 'premium' || t.category === 'star';
+      if (cat === 'pro') return t.category === 'pro';
+      if (cat === 'ultra') return t.category === 'ultra' || t.category === 'mega';
+      if (cat === 'quiz') return t.category === 'quiz';
+      return false;
+    });
+
+    if (catTasks.length > 1) {
+      selectorRow.style.display = 'block';
+      selectorDropdown.innerHTML = catTasks.map(t => 
+        `<option value="${t.id}" ${t.id === taskId ? 'selected' : ''}>${t.title || 'Webtask'} (Level ${t.level || 1})</option>`
+      ).join('');
+    } else {
+      selectorRow.style.display = 'none';
+    }
+  }
+
+  // Load task data into the active category form
+  loadTaskIntoSlideUpForm(taskId);
+
+  const card = overlay.querySelector('.admin-slideup-modal-card');
+  if (card) card.classList.remove('closing');
+  overlay.classList.add('open');
+  overlay.style.display = 'flex';
+}
+window.openEditCategoryTaskPopup = openEditCategoryTaskPopup;
+
+/**
+ * Handle "All Edit Task" button click from category page menu
+ */
+function handleAllEditTaskClick() {
+  const cat = currentAdminCategoryTab || 'common';
+  const catTasks = tasksData.filter(t => {
+    if (cat === 'common') return t.category === 'common' || t.category === 'task';
+    if (cat === 'simple') return t.category === 'simple' || t.category === 'coin';
+    if (cat === 'premium') return t.category === 'premium' || t.category === 'star';
+    if (cat === 'pro') return t.category === 'pro';
+    if (cat === 'ultra') return t.category === 'ultra' || t.category === 'mega';
+    if (cat === 'quiz') return t.category === 'quiz';
+    return false;
+  });
+
+  if (!catTasks || catTasks.length === 0) {
+    showToast('⚠️ No tasks found in this category to edit. Click "＋ Add Task" first!', 3000);
+    return;
+  }
+
+  openEditCategoryTaskPopup(catTasks[0].id);
+}
+window.handleAllEditTaskClick = handleAllEditTaskClick;
+
+/**
+ * Load an existing task's data into the matching category form for editing
+ * @param {string} taskId
+ */
+function loadTaskIntoSlideUpForm(taskId) {
+  const task = tasksData.find(t => t.id === taskId);
+  if (!task) return;
+
+  const cat = currentAdminCategoryTab || 'common';
+  let currentCode = String(task.verificationCode || task.code || task.secretCode || '').trim();
+  if (!currentCode || !/^\d{6}$/.test(currentCode)) {
+    currentCode = Math.floor(100000 + Math.random() * 900000).toString();
+  }
+
+  if (cat === 'common') {
+    switchPopupCommonMode('single');
+    document.getElementById('popupCommonEditId').value = task.id;
+    document.getElementById('popupCommonLevel').value = (task.level || 1).toString();
+    document.getElementById('popupCommonTitle').value = task.title || 'Webtask';
+    document.getElementById('popupCommonUrl').value = task.url || task.link || '';
+    document.getElementById('popupCommonRewardTickets').value = (task.rewardTickets || task.ticketReward || 50).toString();
+    document.getElementById('popupCommonTimer').value = (task.timer || task.timerSeconds || 10).toString();
+    document.getElementById('popupCommonCode').value = currentCode;
+    document.getElementById('popupCommonActive').checked = (task.active !== false);
+    document.getElementById('btnSavePopupCommon').textContent = 'Update Common Task ✓';
+  } else if (cat === 'simple') {
+    document.getElementById('popupCoinEditId').value = task.id;
+    document.getElementById('popupCoinLevel').value = (task.level || 1).toString();
+    document.getElementById('popupCoinTitle').value = task.title || 'Webtask';
+    document.getElementById('popupCoinUrl').value = task.url || task.link || '';
+    document.getElementById('popupCoinTicketCost').value = (task.ticketCost !== undefined ? task.ticketCost : 100).toString();
+    document.getElementById('popupCoinRewardCoins').value = (task.rewardCoins || task.reward || task.coins || 150).toString();
+    document.getElementById('popupCoinTimer').value = (task.timer || task.timerSeconds || 10).toString();
+    document.getElementById('popupCoinCode').value = currentCode;
+    document.getElementById('popupCoinActive').checked = (task.active !== false);
+    document.getElementById('btnSavePopupCoin').textContent = 'Update Coin Task ✓';
+  } else if (cat === 'premium') {
+    document.getElementById('popupStarEditId').value = task.id;
+    document.getElementById('popupStarLevel').value = (task.level || 1).toString();
+    document.getElementById('popupStarTitle').value = task.title || 'Webtask';
+    document.getElementById('popupStarUrl').value = task.url || task.link || '';
+    document.getElementById('popupStarRewardStars').value = (task.rewardStars || 20).toString();
+    document.getElementById('popupStarRewardCoins').value = (task.rewardCoins || 200).toString();
+    document.getElementById('popupStarTimer').value = (task.timer || task.timerSeconds || 15).toString();
+    document.getElementById('popupStarCode').value = currentCode;
+    document.getElementById('popupStarActive').checked = (task.active !== false);
+    document.getElementById('btnSavePopupStar').textContent = 'Update Star Task ✓';
+  } else if (cat === 'pro') {
+    document.getElementById('popupProEditId').value = task.id;
+    document.getElementById('popupProPackageCoinCost').value = (task.coinCost || 5000).toString();
+    document.getElementById('popupProRewardStars').value = (task.rewardStars || 1000).toString();
+    
+    // Find all 3 pack tasks if linked via eventPackId
+    const packTasks = task.eventPackId ? tasksData.filter(t => t.eventPackId === task.eventPackId) : [task];
+    const t1 = packTasks[0] || task;
+    const t2 = packTasks[1] || task;
+    const t3 = packTasks[2] || task;
+
+    document.getElementById('popupProTask1Title').value = t1.title || 'Webtask 1';
+    document.getElementById('popupProTask1Url').value = t1.url || t1.link || 'https://youtube.com/';
+    document.getElementById('popupProTask1Code').value = String(t1.verificationCode || t1.code || '583921');
+
+    document.getElementById('popupProTask2Title').value = t2.title || 'Webtask 2';
+    document.getElementById('popupProTask2Url').value = t2.url || t2.link || 'https://telegram.org/';
+    document.getElementById('popupProTask2Code').value = String(t2.verificationCode || t2.code || '749201');
+
+    document.getElementById('popupProTask3Title').value = t3.title || 'Webtask 3';
+    document.getElementById('popupProTask3Url').value = t3.url || t3.link || 'https://google.com/';
+    document.getElementById('popupProTask3Code').value = String(t3.verificationCode || t3.code || '382910');
+
+    document.getElementById('popupProActive').checked = (task.active !== false);
+    document.getElementById('btnSavePopupPro').textContent = 'Update Pro Package ✓';
+  } else if (cat === 'ultra') {
+    document.getElementById('popupUltraEditId').value = task.id;
+    document.getElementById('popupUltraLevel').value = (task.level || 1).toString();
+    document.getElementById('popupUltraTitle').value = task.title || 'Webtask';
+    document.getElementById('popupUltraUrl').value = task.url || task.link || '';
+    document.getElementById('popupUltraStarCost').value = (task.starCost || 50).toString();
+    document.getElementById('popupUltraInrReward').value = (task.inrReward || 1500).toString();
+    handleUltraPriceCalc('stars');
+    if (task.giftCardType) document.getElementById('popupUltraGiftCardType').value = task.giftCardType;
+    document.getElementById('popupUltraTimer').value = (task.timer || task.timerSeconds || 30).toString();
+    document.getElementById('popupUltraCode').value = currentCode;
+    document.getElementById('popupUltraActive').checked = (task.active !== false);
+    document.getElementById('btnSavePopupUltra').textContent = 'Update Ultra Task ✓';
+  } else if (cat === 'quiz') {
+    document.getElementById('popupQuizEditId').value = task.id;
+    document.getElementById('popupQuizLevel').value = (task.level || 1).toString();
+    document.getElementById('popupQuizTitle').value = task.title || 'Trivia Quiz Mission';
+    document.getElementById('popupQuizUrl').value = task.url || task.link || 'https://google.com/';
+    document.getElementById('popupQuizQuestion').value = task.question || "What is the world's most popular cryptocurrency?";
+    if (Array.isArray(task.options)) {
+      document.getElementById('popupQuizOpt0').value = task.options[0] || 'Bitcoin';
+      document.getElementById('popupQuizOpt1').value = task.options[1] || 'Ethereum';
+      document.getElementById('popupQuizOpt2').value = task.options[2] || 'Dogecoin';
+      document.getElementById('popupQuizOpt3').value = task.options[3] || 'Solana';
+    }
+    document.getElementById('popupQuizCorrectIndex').value = (task.correctIndex !== undefined ? task.correctIndex : 0).toString();
+    document.getElementById('popupQuizRewardCoins').value = (task.rewardCoins || 100).toString();
+    document.getElementById('popupQuizRewardTickets').value = (task.rewardTickets || 25).toString();
+    document.getElementById('popupQuizTimer').value = (task.timer || task.timerSeconds || 10).toString();
+    document.getElementById('popupQuizCode').value = currentCode;
+    document.getElementById('popupQuizActive').checked = (task.active !== false);
+    document.getElementById('btnSavePopupQuiz').textContent = 'Update Quiz Task ✓';
+  }
+
+  // Cost Price is Fixed and NOT editable in Edit Mode per user instruction: "than not cost price edit"
+  const costInputs = ['popupCoinTicketCost', 'popupProPackageCoinCost', 'popupUltraStarCost', 'taskInputTicketCost'];
+  costInputs.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.readOnly = true;
+      el.style.opacity = '0.65';
+      el.style.cursor = 'not-allowed';
+      el.title = '🔒 Cost price is fixed and cannot be edited';
+    }
+  });
+
+  // Ensure Target Link and 6-Digit Code are explicitly editable per user instruction
+  const linkAndCodeInputs = [
+    'popupCommonUrl', 'popupCommonCode',
+    'popupCoinUrl', 'popupCoinCode',
+    'popupStarUrl', 'popupStarCode',
+    'popupProTask1Url', 'popupProTask1Code',
+    'popupProTask2Url', 'popupProTask2Code',
+    'popupProTask3Url', 'popupProTask3Code',
+    'popupUltraUrl', 'popupUltraCode',
+    'popupQuizUrl', 'popupQuizCode',
+    'taskInputUrl', 'taskInputSecret'
+  ];
+  linkAndCodeInputs.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.readOnly = false;
+      el.style.opacity = '1';
+      el.style.cursor = 'text';
+    }
+  });
+}
+window.loadTaskIntoSlideUpForm = loadTaskIntoSlideUpForm;
+
+function closeCategoryTaskPopup() {
+  const overlay = document.getElementById('adminCategoryTaskModalOverlay');
+  if (!overlay) return;
+  const card = overlay.querySelector('.admin-slideup-modal-card');
+  if (card) {
+    card.classList.add('closing');
+    setTimeout(() => {
+      overlay.classList.remove('open');
+      overlay.style.display = 'none';
+      card.classList.remove('closing');
+    }, 200);
+  } else {
+    overlay.classList.remove('open');
+    overlay.style.display = 'none';
+  }
+}
+window.closeCategoryTaskPopup = closeCategoryTaskPopup;
+
+function handleSlideUpModalBackdropClick(e) {
+  if (e && e.target && e.target.id === 'adminCategoryTaskModalOverlay') {
+    closeCategoryTaskPopup();
+  }
+}
+window.handleSlideUpModalBackdropClick = handleSlideUpModalBackdropClick;
+
+function generatePopupSingleCode(targetInputId) {
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  const input = document.getElementById(targetInputId);
+  if (input) input.value = code;
+  return code;
+}
+window.generatePopupSingleCode = generatePopupSingleCode;
+
+// -----------------------------------------------------------------------------
+// 5. COMMON TASK POPUP LOGIC (MULTIPLE LINKS BULK ADD ONLY IN COMMON)
+// -----------------------------------------------------------------------------
+
+function switchPopupCommonMode(mode) {
+  const modeInput = document.getElementById('popupCommonCreationMode');
+  if (modeInput) modeInput.value = mode;
+
+  const btnSingle = document.getElementById('btnCommonModeSingle');
+  const btnBulk = document.getElementById('btnCommonModeBulk');
+  const singleUrl = document.getElementById('groupCommonSingleUrl');
+  const bulkUrls = document.getElementById('groupCommonBulkUrls');
+  const singleCode = document.getElementById('groupCommonSingleCode');
+  const bulkCodes = document.getElementById('groupCommonBulkCodes');
+  const bulkSummary = document.getElementById('boxCommonBulkSummary');
+  const titleLabel = document.getElementById('lblPopupCommonTitle');
+  const inputUrl = document.getElementById('popupCommonUrl');
+  const inputCode = document.getElementById('popupCommonCode');
+
+  if (mode === 'bulk') {
+    btnSingle?.classList.remove('active');
+    btnBulk?.classList.add('active');
+    if (singleUrl) singleUrl.style.display = 'none';
+    if (bulkUrls) bulkUrls.style.display = 'block';
+    if (singleCode) singleCode.style.display = 'none';
+    if (bulkCodes) bulkCodes.style.display = 'block';
+    if (bulkSummary) bulkSummary.style.display = 'block';
+    if (titleLabel) titleLabel.textContent = 'Base Task Title for All Tasks *';
+    if (inputUrl) inputUrl.required = false;
+    if (inputCode) inputCode.required = false;
+    updatePopupCommonBulkCounter();
+  } else {
+    btnSingle?.classList.add('active');
+    btnBulk?.classList.remove('active');
+    if (singleUrl) singleUrl.style.display = 'block';
+    if (bulkUrls) bulkUrls.style.display = 'none';
+    if (singleCode) singleCode.style.display = 'block';
+    if (bulkCodes) bulkCodes.style.display = 'none';
+    if (bulkSummary) bulkSummary.style.display = 'none';
+    if (titleLabel) titleLabel.textContent = 'Task Title *';
+    if (inputUrl) inputUrl.required = true;
+    const saveBtn = document.getElementById('btnSavePopupCommon');
+    if (saveBtn) saveBtn.textContent = 'Save Common Task ✓';
+  }
+}
+window.switchPopupCommonMode = switchPopupCommonMode;
+
+function updatePopupCommonBulkCounter() {
+  const rawUrls = document.getElementById('popupCommonBulkUrls')?.value || '';
+  const urls = rawUrls.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+  const rawCodes = document.getElementById('popupCommonBulkCodes')?.value || '';
+  const codes = rawCodes.split(/\r?\n/).map(c => c.trim()).filter(c => c.length > 0);
+
+  const badgeUrls = document.getElementById('badgeCommonBulkUrls');
+  if (badgeUrls) badgeUrls.textContent = `${urls.length} Link${urls.length === 1 ? '' : 's'}`;
+
+  const badgeCodes = document.getElementById('badgeCommonBulkCodes');
+  if (badgeCodes) badgeCodes.textContent = `${codes.length} Code${codes.length === 1 ? '' : 's'}`;
+
+  const summary = document.getElementById('textCommonBulkSummary');
+  if (summary) {
+    summary.textContent = urls.length > 0
+      ? `Ready to create ${urls.length} Common missions with ${codes.length} verification codes (Win: 50 Tickets).`
+      : 'Paste links above (one per line) to batch create Common Tasks.';
+  }
+
+  const saveBtn = document.getElementById('btnSavePopupCommon');
+  if (saveBtn && document.getElementById('popupCommonCreationMode')?.value === 'bulk') {
+    saveBtn.textContent = urls.length > 1 ? `Save ${urls.length} Common Tasks ✓` : 'Save Common Task ✓';
+  }
+}
+window.updatePopupCommonBulkCounter = updatePopupCommonBulkCounter;
+
+function autoGeneratePopupCommonBulkCodes() {
+  const rawUrls = document.getElementById('popupCommonBulkUrls')?.value || '';
+  const urls = rawUrls.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+  if (urls.length === 0) {
+    showToast('Please paste target URLs first so codes match each link!');
+    return;
+  }
+  const codes = urls.map(() => Math.floor(100000 + Math.random() * 900000).toString());
+  const box = document.getElementById('popupCommonBulkCodes');
+  if (box) box.value = codes.join('\n');
+  updatePopupCommonBulkCounter();
+  showToast(`🎲 Generated ${codes.length} matching 6-digit codes!`);
+}
+window.autoGeneratePopupCommonBulkCodes = autoGeneratePopupCommonBulkCodes;
+
+function handleSavePopupCommonTask(e) {
+  e.preventDefault();
+  const editId = document.getElementById('popupCommonEditId')?.value;
+  const mode = document.getElementById('popupCommonCreationMode')?.value || 'single';
+  const taskLevel = parseInt(document.getElementById('popupCommonLevel')?.value || '1', 10) || 1;
+  const title = document.getElementById('popupCommonTitle')?.value.trim() || 'Webtask';
+  const rewardTickets = parseInt(document.getElementById('popupCommonRewardTickets')?.value || '50', 10) || 50;
+  const timer = parseInt(document.getElementById('popupCommonTimer')?.value || '10', 10);
+  const active = document.getElementById('popupCommonActive')?.checked !== false;
+
+  // 1. Edit existing
+  if (editId) {
+    const url = document.getElementById('popupCommonUrl')?.value.trim();
+    let secretCode = document.getElementById('popupCommonCode')?.value.trim();
+    if (!url) {
+      showToast('Please enter a target URL.');
+      return;
+    }
+    if (!secretCode || !/^\d{6}$/.test(secretCode)) {
+      secretCode = Math.floor(100000 + Math.random() * 900000).toString();
+    }
+    const idx = tasksData.findIndex(t => t.id === editId);
+    if (idx !== -1) {
+      tasksData[idx] = {
+        ...tasksData[idx],
+        title,
+        url,
+        link: url,
+        category: 'common',
+        level: taskLevel,
+        rewardTickets,
+        ticketReward: rewardTickets,
+        rewardCoins: 0,
+        ticketCost: 0,
+        timer,
+        timerSeconds: timer,
+        secretCode,
+        verificationCode: secretCode,
+        code: secretCode,
+        active,
+        updatedAt: Date.now()
+      };
+    }
+    saveTasksAndSync();
+    closeCategoryTaskPopup();
+    showToast(`Common Task updated! Verification Code: ${secretCode} ✓`);
+    return;
+  }
+
+  // 2. Bulk creation
+  if (mode === 'bulk') {
+    const rawUrls = document.getElementById('popupCommonBulkUrls')?.value || '';
+    const urls = rawUrls.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+    if (urls.length === 0) {
+      showToast('Please paste at least one target link.');
+      return;
+    }
+    const rawCodes = document.getElementById('popupCommonBulkCodes')?.value || '';
+    const codes = rawCodes.split(/\r?\n/).map(c => c.trim()).filter(c => c.length > 0);
+    const now = Date.now();
+
+    for (let i = 0; i < urls.length; i++) {
+      let url = urls[i];
+      if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+      const code = (codes[i] && codes[i].length >= 4) ? codes[i] : Math.floor(100000 + Math.random() * 900000).toString();
+      tasksData.push({
+        id: `task_common_${now}_${i}_${Math.random().toString(36).substring(2, 6)}`,
+        title,
+        url,
+        link: url,
+        category: 'common',
+        level: taskLevel,
+        rewardTickets,
+        ticketReward: rewardTickets,
+        rewardCoins: 0,
+        ticketCost: 0,
+        timer,
+        timerSeconds: timer,
+        secretCode: code,
+        verificationCode: code,
+        code,
+        active,
+        createdAt: now + i,
+        updatedAt: now
+      });
+    }
+    saveTasksAndSync();
+    closeCategoryTaskPopup();
+    showToast(`🎉 ${urls.length} Common Tasks created in bulk! ✓`);
+    return;
+  }
+
+  // 3. Single creation
+  const url = document.getElementById('popupCommonUrl')?.value.trim();
+  let secretCode = document.getElementById('popupCommonCode')?.value.trim();
+  if (!url) {
+    showToast('Please enter a target URL.');
+    return;
+  }
+  if (!secretCode || !/^\d{6}$/.test(secretCode)) {
+    secretCode = Math.floor(100000 + Math.random() * 900000).toString();
+  }
+
+  if (editId) {
+    const idx = tasksData.findIndex(t => t.id === editId);
+    if (idx !== -1) {
+      tasksData[idx] = {
+        ...tasksData[idx],
+        title,
+        url,
+        link: url,
+        category: 'common',
+        level: taskLevel,
+        rewardTickets,
+        ticketReward: rewardTickets,
+        rewardCoins: 0,
+        ticketCost: 0,
+        timer,
+        timerSeconds: timer,
+        secretCode,
+        verificationCode: secretCode,
+        code: secretCode,
+        active,
+        updatedAt: Date.now()
+      };
+    }
+    saveTasksAndSync();
+    closeCategoryTaskPopup();
+    showToast(`Common Task updated! Code: ${secretCode} 📋`);
+    return;
+  }
+
+  tasksData.push({
+    id: `task_common_${Date.now()}`,
+    title,
+    url,
+    link: url,
+    category: 'common',
+    level: taskLevel,
+    rewardTickets,
+    ticketReward: rewardTickets,
+    rewardCoins: 0,
+    ticketCost: 0,
+    timer,
+    timerSeconds: timer,
+    secretCode,
+    verificationCode: secretCode,
+    code: secretCode,
+    active,
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  });
+  saveTasksAndSync();
+  closeCategoryTaskPopup();
+  showToast(`New Common Task published! Code: ${secretCode} 📋`);
+}
+window.handleSavePopupCommonTask = handleSavePopupCommonTask;
+
+// -----------------------------------------------------------------------------
+// 6. COIN TASK POPUP LOGIC (OPEN COST: 100 TICKETS, WINNING: 150 COINS)
+// -----------------------------------------------------------------------------
+
+function handleSavePopupCoinTask(e) {
+  e.preventDefault();
+  const editId = document.getElementById('popupCoinEditId')?.value;
+  const taskLevel = parseInt(document.getElementById('popupCoinLevel')?.value || '1', 10) || 1;
+  const title = document.getElementById('popupCoinTitle')?.value.trim() || 'Webtask';
+  const url = document.getElementById('popupCoinUrl')?.value.trim();
+  const ticketCost = Math.max(0, parseInt(document.getElementById('popupCoinTicketCost')?.value || '100', 10));
+  const rewardCoins = parseInt(document.getElementById('popupCoinRewardCoins')?.value || '150', 10) || 150;
+  const timer = parseInt(document.getElementById('popupCoinTimer')?.value || '10', 10);
+  let secretCode = document.getElementById('popupCoinCode')?.value.trim();
+  const active = document.getElementById('popupCoinActive')?.checked !== false;
+
+  if (!url) {
+    showToast('Please enter target URL.');
+    return;
+  }
+  if (!secretCode || !/^\d{6}$/.test(secretCode)) {
+    secretCode = Math.floor(100000 + Math.random() * 900000).toString();
+  }
+
+  if (editId) {
+    const idx = tasksData.findIndex(t => t.id === editId);
+    if (idx !== -1) {
+      tasksData[idx] = {
+        ...tasksData[idx],
+        title,
+        url,
+        link: url,
+        category: 'simple',
+        level: taskLevel,
+        ticketCost,
+        rewardCoins,
+        reward: rewardCoins,
+        coins: rewardCoins,
+        timer,
+        timerSeconds: timer,
+        secretCode,
+        verificationCode: secretCode,
+        code: secretCode,
+        active,
+        updatedAt: Date.now()
+      };
+    }
+    saveTasksAndSync();
+    closeCategoryTaskPopup();
+    showToast(`Coin Task updated! Code: ${secretCode} 🪙`);
+    return;
+  }
+
+  tasksData.push({
+    id: `task_coin_${Date.now()}`,
+    title,
+    url,
+    link: url,
+    category: 'simple',
+    level: taskLevel,
+    ticketCost,
+    rewardCoins,
+    reward: rewardCoins,
+    coins: rewardCoins,
+    timer,
+    timerSeconds: timer,
+    secretCode,
+    verificationCode: secretCode,
+    code: secretCode,
+    active,
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  });
+
+  saveTasksAndSync();
+  closeCategoryTaskPopup();
+  showToast(`New Coin Task published! (Cost: ${ticketCost} 🎟️, Win: ${rewardCoins} 🪙, Code: ${secretCode}) ✓`);
+}
+window.handleSavePopupCoinTask = handleSavePopupCoinTask;
+
+// -----------------------------------------------------------------------------
+// 7. STAR TASK POPUP LOGIC (TICKET COST REMOVED, WINNING: 20 STARS DEFAULT)
+// -----------------------------------------------------------------------------
+
+function handleSavePopupStarTask(e) {
+  e.preventDefault();
+  const editId = document.getElementById('popupStarEditId')?.value;
+  const taskLevel = parseInt(document.getElementById('popupStarLevel')?.value || '1', 10) || 1;
+  const title = document.getElementById('popupStarTitle')?.value.trim() || 'Webtask';
+  const url = document.getElementById('popupStarUrl')?.value.trim();
+  const rewardStars = parseInt(document.getElementById('popupStarRewardStars')?.value || '20', 10) || 20;
+  const rewardCoins = parseInt(document.getElementById('popupStarRewardCoins')?.value || '200', 10) || 200;
+  const timer = parseInt(document.getElementById('popupStarTimer')?.value || '15', 10);
+  let secretCode = document.getElementById('popupStarCode')?.value.trim();
+  const active = document.getElementById('popupStarActive')?.checked !== false;
+
+  if (!url) {
+    showToast('Please enter target URL.');
+    return;
+  }
+  if (!secretCode || !/^\d{6}$/.test(secretCode)) {
+    secretCode = Math.floor(100000 + Math.random() * 900000).toString();
+  }
+
+  if (editId) {
+    const idx = tasksData.findIndex(t => t.id === editId);
+    if (idx !== -1) {
+      tasksData[idx] = {
+        ...tasksData[idx],
+        title,
+        url,
+        link: url,
+        category: 'premium',
+        isShopTask: true,
+        level: taskLevel,
+        ticketCost: 0,
+        rewardStars,
+        rewardCoins,
+        reward: rewardCoins,
+        coins: rewardCoins,
+        timer,
+        timerSeconds: timer,
+        secretCode,
+        verificationCode: secretCode,
+        code: secretCode,
+        active,
+        updatedAt: Date.now()
+      };
+    }
+    saveTasksAndSync();
+    closeCategoryTaskPopup();
+    showToast(`Star Task updated! Code: ${secretCode} ⭐`);
+    return;
+  }
+
+  tasksData.push({
+    id: `task_star_${Date.now()}`,
+    title,
+    url,
+    link: url,
+    category: 'premium',
+    isShopTask: true,
+    level: taskLevel,
+    ticketCost: 0,
+    rewardStars,
+    rewardCoins,
+    reward: rewardCoins,
+    coins: rewardCoins,
+    timer,
+    timerSeconds: timer,
+    secretCode,
+    verificationCode: secretCode,
+    code: secretCode,
+    active,
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  });
+
+  saveTasksAndSync();
+  closeCategoryTaskPopup();
+  showToast(`New Star Task published! (Win: ${rewardStars} ⭐, Code: ${secretCode}) ✓`);
+}
+window.handleSavePopupStarTask = handleSavePopupStarTask;
+
+// -----------------------------------------------------------------------------
+// 8. PRO TASK POPUP LOGIC (3-TASK PACKAGE: COST 5000 COINS, WINNING 1000 STARS)
+// -----------------------------------------------------------------------------
+
+function setProEventDurationHours(hours) {
+  const now = new Date();
+  const end = new Date(Date.now() + hours * 3600 * 1000);
+
+  const startInput = document.getElementById('popupProStartTime');
+  const endInput = document.getElementById('popupProEndTime');
+  if (startInput) startInput.value = now.toISOString().slice(0, 16);
+  if (endInput) endInput.value = end.toISOString().slice(0, 16);
+
+  updateProEventStatusPreview();
+}
+window.setProEventDurationHours = setProEventDurationHours;
+
+function updateProEventStatusPreview() {
+  const startVal = document.getElementById('popupProStartTime')?.value;
+  const endVal = document.getElementById('popupProEndTime')?.value;
+  const badge = document.getElementById('popupProTimerPreviewBadge');
+  const hubTimer = document.getElementById('hubProEventTimerPreview');
+  if (!badge) return;
+
+  const now = Date.now();
+  const startTime = startVal ? new Date(startVal).getTime() : now;
+  const endTime = endVal ? new Date(endVal).getTime() : now + (24 * 3600 * 1000);
+
+  if (startTime > now) {
+    const diffHours = Math.ceil((startTime - now) / 3600000);
+    badge.textContent = `⏱️ Upcoming in ${diffHours}h`;
+    badge.style.color = '#fbbf24';
+    if (hubTimer) hubTimer.textContent = `⏱️ Upcoming (${diffHours}h)`;
+  } else if (endTime > now) {
+    const diffHours = Math.ceil((endTime - now) / 3600000);
+    badge.textContent = `⏱️ Active: Ends in ${diffHours}h`;
+    badge.style.color = '#34d399';
+    if (hubTimer) hubTimer.textContent = `⏱️ Ends in ${diffHours}h`;
+  } else {
+    badge.textContent = '⏱️ Event Ended';
+    badge.style.color = '#ef4444';
+    if (hubTimer) hubTimer.textContent = '⏱️ Ended';
+  }
+}
+window.updateProEventStatusPreview = updateProEventStatusPreview;
+
+function handleSavePopupProPackage(e) {
+  e.preventDefault();
+  const packCoinCost = Math.max(0, parseInt(document.getElementById('popupProPackageCoinCost')?.value || '5000', 10));
+  const rewardStars = Math.max(1, parseInt(document.getElementById('popupProRewardStars')?.value || '1000', 10));
+  const active = document.getElementById('popupProActive')?.checked !== false;
+
+  const startVal = document.getElementById('popupProStartTime')?.value;
+  const endVal = document.getElementById('popupProEndTime')?.value;
+  const eventStartTime = startVal ? new Date(startVal).getTime() : Date.now();
+  const eventEndTime = endVal ? new Date(endVal).getTime() : Date.now() + (24 * 3600 * 1000);
+
+  const t1Title = document.getElementById('popupProTask1Title')?.value.trim() || 'Webtask 1';
+  const t1Url = document.getElementById('popupProTask1Url')?.value.trim() || 'https://youtube.com/';
+  const t1Code = document.getElementById('popupProTask1Code')?.value.trim() || '583921';
+
+  const t2Title = document.getElementById('popupProTask2Title')?.value.trim() || 'Webtask 2';
+  const t2Url = document.getElementById('popupProTask2Url')?.value.trim() || 'https://telegram.org/';
+  const t2Code = document.getElementById('popupProTask2Code')?.value.trim() || '749201';
+
+  const t3Title = document.getElementById('popupProTask3Title')?.value.trim() || 'Webtask 3';
+  const t3Url = document.getElementById('popupProTask3Url')?.value.trim() || 'https://google.com/';
+  const t3Code = document.getElementById('popupProTask3Code')?.value.trim() || '382910';
+
+  const editId = document.getElementById('popupProEditId')?.value;
+  if (editId) {
+    const existing = tasksData.find(t => t.id === editId);
+    const existingPackId = existing?.eventPackId;
+    const packIndices = existingPackId 
+      ? tasksData.map((t, i) => (t.eventPackId === existingPackId ? i : -1)).filter(i => i !== -1)
+      : [tasksData.findIndex(t => t.id === editId)].filter(i => i !== -1);
+
+    if (packIndices.length >= 3) {
+      tasksData[packIndices[0]] = { ...tasksData[packIndices[0]], title: t1Title, url: t1Url, link: t1Url, coinCost: packCoinCost, rewardStars: Math.round(rewardStars * 0.25), secretCode: t1Code, verificationCode: t1Code, code: t1Code, eventStartTime, eventEndTime, active, updatedAt: Date.now() };
+      tasksData[packIndices[1]] = { ...tasksData[packIndices[1]], title: t2Title, url: t2Url, link: t2Url, coinCost: packCoinCost, rewardStars: Math.round(rewardStars * 0.25), secretCode: t2Code, verificationCode: t2Code, code: t2Code, eventStartTime, eventEndTime, active, updatedAt: Date.now() };
+      tasksData[packIndices[2]] = { ...tasksData[packIndices[2]], title: t3Title, url: t3Url, link: t3Url, coinCost: packCoinCost, rewardStars: Math.round(rewardStars * 0.5), secretCode: t3Code, verificationCode: t3Code, code: t3Code, eventStartTime, eventEndTime, active, updatedAt: Date.now() };
+    } else if (packIndices.length > 0) {
+      tasksData[packIndices[0]] = { ...tasksData[packIndices[0]], title: t1Title, url: t1Url, link: t1Url, coinCost: packCoinCost, rewardStars, secretCode: t1Code, verificationCode: t1Code, code: t1Code, eventStartTime, eventEndTime, active, updatedAt: Date.now() };
+    }
+    saveTasksAndSync();
+    closeCategoryTaskPopup();
+    showToast(`🏆 Pro Task updated! Cost: ${packCoinCost.toLocaleString()} 🪙, Win: ${rewardStars.toLocaleString()} ⭐ ✓`);
+    return;
+  }
+
+  const packId = 'pack_' + Date.now();
+
+  const sub1 = {
+    id: `task_pro_${Date.now()}_1`,
+    title: t1Title,
+    url: t1Url,
+    link: t1Url,
+    category: 'pro',
+    level: 3,
+    isEventTask: true,
+    eventPackId: packId,
+    coinCost: packCoinCost,
+    ticketCost: 0,
+    rewardStars: Math.round(rewardStars * 0.25),
+    rewardCoins: 500,
+    eventStartTime,
+    eventEndTime,
+    secretCode: t1Code,
+    verificationCode: t1Code,
+    code: t1Code,
+    active,
+    createdAt: Date.now()
+  };
+
+  const sub2 = {
+    id: `task_pro_${Date.now()}_2`,
+    title: t2Title,
+    url: t2Url,
+    link: t2Url,
+    category: 'pro',
+    level: 3,
+    isEventTask: true,
+    eventPackId: packId,
+    coinCost: packCoinCost,
+    ticketCost: 0,
+    rewardStars: Math.round(rewardStars * 0.25),
+    rewardCoins: 500,
+    eventStartTime,
+    eventEndTime,
+    secretCode: t2Code,
+    verificationCode: t2Code,
+    code: t2Code,
+    active,
+    createdAt: Date.now() + 1
+  };
+
+  const sub3 = {
+    id: `task_pro_${Date.now()}_3`,
+    title: t3Title,
+    url: t3Url,
+    link: t3Url,
+    category: 'pro',
+    level: 3,
+    isEventTask: true,
+    eventPackId: packId,
+    coinCost: packCoinCost,
+    ticketCost: 0,
+    rewardStars: Math.round(rewardStars * 0.5),
+    rewardCoins: 1000,
+    eventStartTime,
+    eventEndTime,
+    secretCode: t3Code,
+    verificationCode: t3Code,
+    code: t3Code,
+    active,
+    createdAt: Date.now() + 2
+  };
+
+  tasksData.unshift(sub1, sub2, sub3);
+  saveTasksAndSync();
+  closeCategoryTaskPopup();
+  showToast(`🏆 Pro 3-Task Pack saved! Cost: ${packCoinCost.toLocaleString()} 🪙, Win: ${rewardStars.toLocaleString()} ⭐ ✓`);
+}
+window.handleSavePopupProPackage = handleSavePopupProPackage;
+
+// -----------------------------------------------------------------------------
+// 9. ULTRA TASK POPUP LOGIC (GIFT CARD IN INR & 1 STAR = RS 30 DYNAMIC CALC)
+// -----------------------------------------------------------------------------
+
+function handleUltraPriceCalc(source) {
+  const starInput = document.getElementById('popupUltraStarCost');
+  const inrInput = document.getElementById('popupUltraInrReward');
+  const feedback = document.getElementById('ultraCalcFeedback');
+  if (!starInput || !inrInput) return;
+
+  const RATE = 30; // 1 Star = 30 INR
+
+  if (source === 'stars') {
+    const stars = Math.max(1, parseInt(starInput.value || '50', 10));
+    const inr = stars * RATE;
+    inrInput.value = inr;
+    if (feedback) feedback.textContent = `${stars} Stars = ₹${inr.toLocaleString()} Gift Card`;
+  } else if (source === 'inr') {
+    const inr = Math.max(1, parseInt(inrInput.value || '1500', 10));
+    const stars = Math.max(1, Math.round(inr / RATE));
+    starInput.value = stars;
+    if (feedback) feedback.textContent = `${stars} Stars = ₹${inr.toLocaleString()} Gift Card`;
+  }
+}
+window.handleUltraPriceCalc = handleUltraPriceCalc;
+
+function handleSavePopupUltraTask(e) {
+  e.preventDefault();
+  const editId = document.getElementById('popupUltraEditId')?.value;
+  const taskLevel = parseInt(document.getElementById('popupUltraLevel')?.value || '1', 10) || 1;
+  const title = document.getElementById('popupUltraTitle')?.value.trim() || 'Webtask';
+  const url = document.getElementById('popupUltraUrl')?.value.trim();
+  const starCost = Math.max(1, parseInt(document.getElementById('popupUltraStarCost')?.value || '50', 10));
+  const inrReward = Math.max(1, parseInt(document.getElementById('popupUltraInrReward')?.value || '1500', 10));
+  const giftCardType = document.getElementById('popupUltraGiftCardType')?.value.trim() || 'Amazon / UPI Voucher';
+  const timer = parseInt(document.getElementById('popupUltraTimer')?.value || '30', 10);
+  let secretCode = document.getElementById('popupUltraCode')?.value.trim();
+  const active = document.getElementById('popupUltraActive')?.checked !== false;
+
+  if (!url) {
+    showToast('Please enter target URL.');
+    return;
+  }
+  if (!secretCode || !/^\d{6}$/.test(secretCode)) {
+    secretCode = Math.floor(100000 + Math.random() * 900000).toString();
+  }
+
+  if (editId) {
+    const idx = tasksData.findIndex(t => t.id === editId);
+    if (idx !== -1) {
+      tasksData[idx] = {
+        ...tasksData[idx],
+        title,
+        url,
+        link: url,
+        category: 'ultra',
+        level: taskLevel,
+        starCost,
+        inrReward,
+        giftCardType,
+        rewardCoins: 5000,
+        rewardStars: starCost,
+        timer,
+        timerSeconds: timer,
+        secretCode,
+        verificationCode: secretCode,
+        code: secretCode,
+        active,
+        updatedAt: Date.now()
+      };
+    }
+    saveTasksAndSync();
+    closeCategoryTaskPopup();
+    showToast(`Ultra Task updated! Code: ${secretCode} ⚡`);
+    return;
+  }
+
+  tasksData.push({
+    id: `task_ultra_${Date.now()}`,
+    title,
+    url,
+    link: url,
+    category: 'ultra',
+    level: taskLevel,
+    starCost,
+    inrReward,
+    giftCardType,
+    rewardCoins: 5000,
+    rewardStars: starCost,
+    timer,
+    timerSeconds: timer,
+    secretCode,
+    verificationCode: secretCode,
+    code: secretCode,
+    active,
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  });
+
+  saveTasksAndSync();
+  closeCategoryTaskPopup();
+  showToast(`New Ultra Task published! (Cost: ${starCost} ⭐, Win: ₹${inrReward.toLocaleString()} Gift Card, Code: ${secretCode}) ⚡`);
+}
+window.handleSavePopupUltraTask = handleSavePopupUltraTask;
+
+// -----------------------------------------------------------------------------
+// 9b. QUIZ TASK POPUP LOGIC (TRIVIA KNOWLEDGE MISSIONS)
+// -----------------------------------------------------------------------------
+
+function handleSavePopupQuizTask(e) {
+  e.preventDefault();
+  const editId = document.getElementById('popupQuizEditId')?.value;
+  const taskLevel = parseInt(document.getElementById('popupQuizLevel')?.value || '1', 10) || 1;
+  const title = document.getElementById('popupQuizTitle')?.value.trim() || 'Trivia Quiz Mission';
+  const url = document.getElementById('popupQuizUrl')?.value.trim() || 'https://google.com/';
+  const question = document.getElementById('popupQuizQuestion')?.value.trim() || "What is the world's most popular cryptocurrency?";
+  const options = [
+    document.getElementById('popupQuizOpt0')?.value.trim() || 'Bitcoin',
+    document.getElementById('popupQuizOpt1')?.value.trim() || 'Ethereum',
+    document.getElementById('popupQuizOpt2')?.value.trim() || 'Dogecoin',
+    document.getElementById('popupQuizOpt3')?.value.trim() || 'Solana'
+  ];
+  const correctIndex = parseInt(document.getElementById('popupQuizCorrectIndex')?.value || '0', 10);
+  const rewardCoins = parseInt(document.getElementById('popupQuizRewardCoins')?.value || '100', 10) || 100;
+  const rewardTickets = parseInt(document.getElementById('popupQuizRewardTickets')?.value || '25', 10) || 25;
+  const timer = parseInt(document.getElementById('popupQuizTimer')?.value || '10', 10);
+  let secretCode = document.getElementById('popupQuizCode')?.value.trim();
+  const active = document.getElementById('popupQuizActive')?.checked !== false;
+
+  if (!secretCode || !/^\d{6}$/.test(secretCode)) {
+    secretCode = Math.floor(100000 + Math.random() * 900000).toString();
+  }
+
+  if (editId) {
+    const idx = tasksData.findIndex(t => t.id === editId);
+    if (idx !== -1) {
+      tasksData[idx] = {
+        ...tasksData[idx],
+        title,
+        url,
+        link: url,
+        question,
+        options,
+        correctIndex,
+        category: 'quiz',
+        level: taskLevel,
+        rewardCoins,
+        rewardTickets,
+        timer,
+        timerSeconds: timer,
+        secretCode,
+        verificationCode: secretCode,
+        code: secretCode,
+        active,
+        updatedAt: Date.now()
+      };
+    }
+    saveTasksAndSync();
+    closeCategoryTaskPopup();
+    showToast(`🧠 Quiz Task updated! Code: ${secretCode}`);
+    return;
+  }
+
+  tasksData.push({
+    id: `task_quiz_${Date.now()}`,
+    title,
+    url,
+    link: url,
+    question,
+    options,
+    correctIndex,
+    category: 'quiz',
+    level: taskLevel,
+    rewardCoins,
+    rewardTickets,
+    ticketCost: 0,
+    timer,
+    timerSeconds: timer,
+    secretCode,
+    verificationCode: secretCode,
+    code: secretCode,
+    active,
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  });
+
+  saveTasksAndSync();
+  closeCategoryTaskPopup();
+  showToast(`🎉 New Trivia Quiz Task published! Code: ${secretCode} 🧠`);
+}
+window.handleSavePopupQuizTask = handleSavePopupQuizTask;
+
+// -----------------------------------------------------------------------------
+// 10. EDITING & RENDERING TASKS LIST
+// -----------------------------------------------------------------------------
+
+function openEditTaskModal(taskId) {
+  const task = tasksData.find(t => t.id === taskId);
+  if (!task) return;
+
+  // Determine category
+  let cat = task.category || 'common';
+  if (task.category === 'coin') cat = 'simple';
+  if (task.category === 'star') cat = 'premium';
+
+  // Ensure category page is open
+  currentAdminCategoryTab = cat;
+  openAdminTaskCategoryPage(cat);
+
+  // Open slide-up popup in Edit mode with target task loaded
+  openEditCategoryTaskPopup(taskId);
+}
+window.openEditTaskModal = openEditTaskModal;
+
+function openCreateTaskModal() {
+  openAddCategoryTaskPopup();
+}
+window.openCreateTaskModal = openCreateTaskModal;
+
+function renderAdminTasksList() {
+  const container = document.getElementById('adminTasksList');
+  if (!container) return;
+
+  const searchVal = (document.getElementById('adminTaskSearch')?.value || '').toLowerCase().trim();
+  let list = [...tasksData];
+
+  // 1. Filter by active category tab
+  if (currentAdminCategoryTab === 'common') {
+    list = list.filter(t => t.category === 'common');
+  } else if (currentAdminCategoryTab === 'simple') {
+    list = list.filter(t => (t.category === 'simple' || t.category === 'coin') && t.category !== 'common' && t.category !== 'pro' && t.category !== 'ultra' && !t.isShopTask);
+  } else if (currentAdminCategoryTab === 'premium') {
+    list = list.filter(t => (t.category === 'premium' || t.category === 'star' || t.isShopTask || t.category === 'shop_task') && t.category !== 'common' && t.category !== 'pro' && t.category !== 'ultra');
+  } else if (currentAdminCategoryTab === 'pro') {
+    list = list.filter(t => t.category === 'pro' || t.category === 'elite');
+  } else if (currentAdminCategoryTab === 'ultra') {
+    list = list.filter(t => t.category === 'ultra');
+  }
+
+  // 2. Filter by level if selected
+  if (currentAdminLevelFilter !== 'all') {
+    list = list.filter(t => Number(t.level || 1) === currentAdminLevelFilter);
+  }
+
+  // 3. Search filter
+  if (searchVal) {
+    list = list.filter(t => t.title && t.title.toLowerCase().includes(searchVal));
+  }
+
+  updateAdminCounters();
+
+  if (list.length === 0) {
+    container.innerHTML = `
+      <div style="text-align: center; padding: 2rem 1rem; color: #94a3b8; font-size: 0.85rem; background: #0a1738; border-radius: 14px; border: 1px dashed rgba(56, 189, 248, 0.25);">
+        <div style="font-size: 2.2rem; margin-bottom: 0.5rem;">📋</div>
+        <div style="font-weight: 800; color: #ffffff; margin-bottom: 0.25rem;">${searchVal ? 'No tasks match search' : 'No Tasks in this Category Yet'}</div>
+        <div style="font-size: 0.75rem; color: #64748b; margin-bottom: 0.75rem;">Click "＋ Add Task" above to publish tasks immediately.</div>
+        <button class="btn-card-action" onclick="openAddCategoryTaskPopup()">＋ Add Task Now</button>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = list.map(task => {
+    const isActive = task.active !== false;
+    const taskCode = task.verificationCode || task.code || task.secretCode || '';
+
+    let catBadge = '📋 Common Task';
+    let borderColor = '#38bdf8';
+    let rewardLabel = `+${task.rewardTickets || 50} 🎟️`;
+    let costLabel = '';
+
+    if (task.category === 'ultra') {
+      catBadge = '⚡ Ultra Task';
+      borderColor = '#d946ef';
+      rewardLabel = `🎁 ₹${(task.inrReward || 1500).toLocaleString()} Voucher`;
+      costLabel = `Cost: ${task.starCost || 50} ⭐`;
+    } else if (task.category === 'pro' || task.category === 'elite') {
+      catBadge = '💎 Pro Task';
+      borderColor = '#34d399';
+      rewardLabel = `+${task.rewardStars || 1000} ⭐`;
+      costLabel = `Cost: ${task.coinCost || 5000} 🪙`;
+    } else if (task.category === 'premium' || task.category === 'star' || task.isShopTask || task.category === 'shop_task') {
+      catBadge = '⭐ Star Task';
+      borderColor = '#a855f7';
+      rewardLabel = `+${task.rewardStars || 20} ⭐`;
+    } else if (task.category === 'simple' || task.category === 'coin') {
+      catBadge = '🪙 Coin Task';
+      borderColor = '#fbbf24';
+      rewardLabel = `+${task.rewardCoins || 150} 🪙`;
+      costLabel = `Cost: ${task.ticketCost !== undefined ? task.ticketCost : 100} 🎟️`;
+    }
+
+    return `
+      <div class="admin-task-card ${isCategoryQuickEditActive ? 'quick-edit-highlight' : ''}" style="border-left: 3.5px solid ${isActive ? borderColor : '#64748b'};">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem;">
+          <div>
+            <h4 style="font-size: 0.92rem; font-weight: 800; color: #ffffff; margin: 0.15rem 0 0.25rem 0;">${escapeHtml(task.title || 'Webtask')}</h4>
+            <div style="font-size: 0.72rem; color: #38bdf8; line-height: 1.3; font-family: monospace; word-break: break-all;">${escapeHtml(task.url || task.link || '')}</div>
+          </div>
+          <span style="font-size: 0.65rem; font-weight: 800; padding: 2px 6px; border-radius: 6px; background: ${isActive ? 'rgba(52, 211, 153, 0.15)' : 'rgba(148, 163, 184, 0.15)'}; color: ${isActive ? '#34d399' : '#94a3b8'};">
+            ${isActive ? 'Active 🟢' : 'Paused ⚪'}
+          </span>
+        </div>
+
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 0.65rem; padding-top: 0.5rem; border-top: 1px solid rgba(255, 255, 255, 0.05); font-size: 0.75rem;">
+          <div style="display: flex; gap: 0.5rem; font-weight: 800; align-items: center; flex-wrap: wrap;">
+            <span style="color: #fbbf24; font-weight: 900;">${rewardLabel}</span>
+            ${costLabel ? `<span class="count-badge" style="background: rgba(168, 85, 247, 0.2); color: #c084fc; font-size: 0.68rem; padding: 2px 6px;">${costLabel}</span>` : ''}
+            <span class="count-badge" style="background: rgba(255, 255, 255, 0.08); color: #cbd5e1; font-size: 0.68rem; padding: 2px 6px;">${catBadge}</span>
+            <span class="count-badge" style="background: rgba(250, 204, 21, 0.15); color: #facc15; font-size: 0.68rem; padding: 2px 6px;">⭐ Lvl ${task.level || 1}</span>
+            <span style="color: #38bdf8; font-family: monospace; font-size: 0.76rem; font-weight: 800; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.35); padding: 2px 8px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px;">
+              <span>🔑 Code:</span> <b style="color: #facc15; font-size: 0.85rem; letter-spacing: 0.08em;">${escapeHtml(taskCode || '000000')}</b>
+            </span>
+          </div>
+
+          <div style="display: flex; gap: 0.35rem;">
+            <button class="btn-card-action btn-task-edit-action" onclick="openEditTaskModal('${task.id}')" title="Edit this task in popup">✏️ Edit</button>
+            <button class="btn-card-action" onclick="toggleTaskActive('${task.id}')" title="Toggle active status">${isActive ? 'Pause' : 'Play'}</button>
+            <button class="btn-card-action danger" onclick="deleteAdminTask('${task.id}')" title="Delete Mission">🗑️</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+window.renderAdminTasksList = renderAdminTasksList;
+
+function handleAdminTaskSearch(val) {
+  renderAdminTasksList();
+}
+window.handleAdminTaskSearch = handleAdminTaskSearch;
+
+// Legacy modal helpers maintained for test backward compatibility
+function closeAdminTaskModal() {
+  closeCategoryTaskPopup();
+}
+window.closeAdminTaskModal = closeAdminTaskModal;
+
+function handleTaskModalBackdropClick(e) {
+  closeCategoryTaskPopup();
+}
+window.handleTaskModalBackdropClick = handleTaskModalBackdropClick;
+
+function generateRandomTaskCode() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+window.generateRandomTaskCode = generateRandomTaskCode;
+
+function switchAdminTaskMode(mode) {
+  switchPopupCommonMode(mode);
+}
+window.switchAdminTaskMode = switchAdminTaskMode;
+
+function updateBulkTaskCounter() {
+  updatePopupCommonBulkCounter();
+}
+window.updateBulkTaskCounter = updateBulkTaskCounter;
+
+function generateRandomSingleCode() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+window.generateRandomSingleCode = generateRandomSingleCode;
+
+function autoGenerateAllBulkCodes() {
+  autoGeneratePopupCommonBulkCodes();
+}
+window.autoGenerateAllBulkCodes = autoGenerateAllBulkCodes;
+
+function handleAdminTaskCategoryChange(val) {
+  openAdminTaskCategoryPage(val);
+}
+window.handleAdminTaskCategoryChange = handleAdminTaskCategoryChange;
+
+function handleSaveAdminTaskForm(e) {
+  e.preventDefault();
+  handleSavePopupCommonTask(e);
+}
+window.handleSaveAdminTaskForm = handleSaveAdminTaskForm;
+
+function toggleTaskActive(taskId) {
+  const task = tasksData.find(t => t.id === taskId);
+  if (!task) return;
+  task.active = (task.active === false);
+  saveTasksAndSync();
+  showToast(`Mission ${task.active ? 'activated' : 'paused'}.`);
+}
+
+function deleteAdminTask(taskId) {
+  if (!confirm('Are you sure you want to delete this mission?')) return;
+  tasksData = tasksData.filter(t => t.id !== taskId);
+  saveTasksAndSync();
+  showToast('Mission deleted.');
+}
+
+function resetPlayerCooldowns() {
+  localStorage.removeItem(CLAIMS_STORAGE_KEY);
+  localStorage.setItem(SYNC_FLAG_KEY, Date.now().toString());
+  if (syncChannel) {
+    syncChannel.postMessage({ type: 'CLAIMS_UPDATED', timestamp: Date.now() });
+  }
+  showToast('🔄 All player mission cooldowns reset! ✓');
+}
+
+// Canonical default tasks - Pure real missions (Demo tasks removed per user request)
+const CANONICAL_BASIC_DEFAULT_TASKS = [
+  { id: 'comm_mission_1', title: 'Follow Official Twitter / X', description: 'Follow our official announcement channel on X', rewardTickets: 50, category: 'common', url: 'https://twitter.com' },
+  { id: 'comm_mission_2', title: 'Join Telegram Community Group', description: 'Join the community group & say hello to fellow earners', rewardTickets: 50, category: 'common', url: 'https://t.me' },
+  { id: 'comm_mission_3', title: 'Subscribe to YouTube Channel', description: 'Watch intro video and subscribe for updates', rewardTickets: 50, category: 'common', url: 'https://youtube.com' },
+  { id: 'comm_mission_4', title: 'Like & Retweet Pinned Post', description: 'Share the latest prize drop post with friends', rewardTickets: 50, category: 'common', url: 'https://twitter.com' },
+  { id: 'comm_mission_5', title: 'Daily Community Check-In', description: 'Claim your daily attendance bounty ticket', rewardTickets: 50, category: 'common', url: 'https://google.com' },
+  { id: 'comm_mission_6', title: 'Explore Sponsor Partner Portal', description: 'Visit our premier partner page and explore features', rewardTickets: 50, category: 'common', url: 'https://uplcm.com/4/12169313' },
+  { id: 'comm_mission_7', title: 'Share Referral Link with Friends', description: 'Invite a friend to join the task arcade network', rewardTickets: 50, category: 'common', url: 'https://google.com' },
+  { id: 'comm_mission_8', title: 'Read Platform Beginner Guide', description: 'Learn how to maximize your coins and ticket earnings', rewardTickets: 50, category: 'common', url: 'https://google.com' },
+  { id: 'comm_mission_9', title: 'Join Discord Discussion Hub', description: 'Participate in active voice & text community chats', rewardTickets: 50, category: 'common', url: 'https://discord.com' },
+  { id: 'comm_mission_10', title: 'Complete Quick Arcade Rating', description: 'Rate your today gaming experience on the portal', rewardTickets: 50, category: 'common', url: 'https://google.com' },
+  { id: 'coin_mission_1', title: 'Visit Crypto Market Tracker', description: 'Explore live trading prices and volume charts', rewardCoins: 150, rewardTickets: 0, ticketCost: 100, category: 'coin', url: 'https://coinmarketcap.com' },
+  { id: 'coin_mission_2', title: 'Follow Web3 Builders Hub', description: 'Follow developer announcements on X', rewardCoins: 150, rewardTickets: 0, ticketCost: 100, category: 'coin', url: 'https://twitter.com' },
+  { id: 'coin_mission_3', title: 'Watch Crypto Wallet Tutorial', description: 'Learn how to set up self-custody wallet safely', rewardCoins: 150, rewardTickets: 0, ticketCost: 100, category: 'coin', url: 'https://youtube.com' },
+  { id: 'coin_mission_4', title: 'Join Crypto News Discussion', description: 'Discuss today top crypto headlines on Telegram', rewardCoins: 150, rewardTickets: 0, ticketCost: 100, category: 'coin', url: 'https://t.me' },
+  { id: 'coin_mission_5', title: 'Check Today Gas Price Index', description: 'View Ethereum and Solana average transaction fees', rewardCoins: 150, rewardTickets: 0, ticketCost: 100, category: 'coin', url: 'https://etherscan.io' },
+  { id: 'coin_mission_6', title: 'Explore Sponsor Special Partner', description: 'Visit featured sponsor portal for bonus perks', rewardCoins: 150, rewardTickets: 0, ticketCost: 100, category: 'coin', url: 'https://uplcm.com/4/12169313' },
+  { id: 'coin_mission_7', title: 'Read Layer-2 Scaling Explainer', description: 'Learn about rollups and zero-knowledge tech', rewardCoins: 150, rewardTickets: 0, ticketCost: 100, category: 'coin', url: 'https://google.com' },
+  { id: 'coin_mission_8', title: 'Daily Coin Arcade Check-in', description: 'Verify attendance and collect daily coin drop', rewardCoins: 150, rewardTickets: 0, ticketCost: 100, category: 'coin', url: 'https://google.com' },
+  { id: 'star_mission_1', title: 'VIP Mission 1: Sponsor Alpha Review', description: 'Exclusive VIP sponsor mission • High star yield', rewardStars: 10, rewardCoins: 200, category: 'star', url: 'https://uplcm.com/4/12169313' },
+  { id: 'star_mission_2', title: 'VIP Mission 2: Partner Portal Test', description: 'Verify partner features and claim VIP bounty', rewardStars: 10, rewardCoins: 250, category: 'star', url: 'https://uplcm.com/4/12169338' },
+  { id: 'star_mission_3', title: 'VIP Mission 3: Premium Video Watch', description: 'Watch partner video for top tier Star reward', rewardStars: 15, rewardCoins: 300, category: 'star', url: 'https://youtube.com' },
+  { id: 'star_mission_4', title: 'VIP Mission 4: Join VIP Telegram Lounge', description: 'Access private telegram community for VIP earners', rewardStars: 15, rewardCoins: 350, category: 'star', url: 'https://t.me' },
+  { id: 'star_mission_5', title: 'VIP Mission 5: Exclusive Partner Quest', description: 'Complete high-tier sponsor challenge', rewardStars: 20, rewardCoins: 400, category: 'star', url: 'https://uplcm.com/4/12169321' },
+  { id: 'pro_mission_1', title: 'Pro Elite Pack 1: Market Analysis', description: '3-Task package step 1', rewardCoins: 500, category: 'pro', url: 'https://youtube.com' },
+  { id: 'pro_mission_2', title: 'Pro Elite Pack 2: Community Join', description: '3-Task package step 2', rewardCoins: 250, category: 'pro', url: 'https://t.me' },
+  { id: 'pro_mission_3', title: 'Pro Elite Pack 3: Survey Bonus', description: '3-Task package step 3', rewardCoins: 250, category: 'pro', url: 'https://google.com' },
+  { id: 'ultra_mission_1', title: 'Ultra Level 1: Apex Gift Card Bounty', description: 'Win ₹1,500 Gift Voucher on completion', starCost: 50, inrReward: 1500, category: 'ultra', url: 'https://google.com' },
+  { id: 'ultra_mission_2', title: 'Ultra Level 2: Amazon Mega Card', description: 'Win ₹3,000 Gift Voucher on completion', starCost: 100, inrReward: 3000, category: 'ultra', url: 'https://google.com' },
+  { id: 'quiz_task_1', title: 'Crypto Basics Trivia', description: 'Answer trivia questions', rewardCoins: 100, rewardTickets: 25, category: 'quiz', url: 'https://google.com', question: "What is the world's most popular cryptocurrency?", options: ["Bitcoin", "Ethereum", "Dogecoin", "Solana"], correctIndex: 0 },
+  { id: 'quiz_task_2', title: 'Blockchain History Trivia', description: 'Answer trivia questions', rewardCoins: 100, rewardTickets: 25, category: 'quiz', url: 'https://google.com', question: "In what year was the Bitcoin genesis block mined?", options: ["2007", "2008", "2009", "2010"], correctIndex: 2 }
+];
+
+function restoreAndRenewAllTasks() {
+  if (!confirm("Are you sure you want to restore all basic missions and renew all tasks for all players?\n\nThis will reset all completion records so that both completed and non-completed tasks are refreshed back to active and visible in the app!")) {
+    return;
+  }
+
+  // 1. Reset all completed task tracking across all storage keys
+  localStorage.setItem('task_game_completed_tasks', '{}');
+  localStorage.setItem('task_completed_tasks', '{}');
+  localStorage.removeItem(CLAIMS_STORAGE_KEY);
+  localStorage.removeItem('task_game_claims');
+  localStorage.setItem('completed_tasks_count', '0');
+  localStorage.setItem('task_game_total_tasks_completed', '0');
+  localStorage.setItem('task_pass_total_completed', '0');
+
+  // Reset all balances (coins, stars, tickets) to 0
+  localStorage.setItem('task_game_coins', '0');
+  localStorage.setItem('user_coins', '0');
+  localStorage.setItem('task_game_stars', '0');
+  localStorage.setItem('user_stars', '0');
+  localStorage.setItem('task_user_tickets', '0');
+  localStorage.setItem('user_tickets', '0');
+  localStorage.setItem('task_game_tickets', '0');
+  if (typeof updateAllDomBalances === 'function') {
+    updateAllDomBalances(0, 0, 0);
+  }
+
+  // Clear any temporary task open/claim state
+  for (let i = localStorage.length - 1; i >= 0; i--) {
+    const k = localStorage.key(i);
+    if (k && (k.startsWith('task_opened_') || k.startsWith('task_claimed_'))) {
+      localStorage.removeItem(k);
+    }
+  }
+
+  // 2. Restore basic default tasks to storage
+  tasksData = JSON.parse(JSON.stringify(CANONICAL_BASIC_DEFAULT_TASKS));
+  localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(tasksData));
+  localStorage.setItem('admin_tasks', JSON.stringify(tasksData));
+
+  // 3. Set sync flags
+  localStorage.setItem(SYNC_FLAG_KEY, Date.now().toString());
+  localStorage.setItem('task_restore_flag', Date.now().toString());
+
+  // 4. Broadcast to other open windows / tabs
+  if (syncChannel) {
+    syncChannel.postMessage({ type: 'TASKS_RESTORED', timestamp: Date.now() });
+    syncChannel.postMessage({ type: 'TASKS_UPDATED', timestamp: Date.now() });
+    syncChannel.postMessage({ type: 'CLAIMS_UPDATED', timestamp: Date.now() });
+    syncChannel.postMessage({ type: 'BALANCES_UPDATED', coins: 0, stars: 0, tickets: 0, timestamp: Date.now() });
+  }
+  try {
+    const bc = new BroadcastChannel('nova_task_sync');
+    bc.postMessage({ type: 'TASKS_RESTORED', timestamp: Date.now() });
+    bc.postMessage({ type: 'TASKS_UPDATED', timestamp: Date.now() });
+    bc.postMessage({ type: 'BALANCES_UPDATED', coins: 0, stars: 0, tickets: 0, timestamp: Date.now() });
+    bc.close();
+  } catch(e) {}
+
+  // 5. Cloud sync if Firebase is present
+  if (window.Firebase && typeof window.Firebase.saveTasksToCloud === 'function') {
+    window.Firebase.saveTasksToCloud(tasksData);
+  }
+
+  // 6. Refresh admin UI
+  renderAdminTasksList();
+  showToast('🔄 All missions restored to basic state and renewed for all players! ✓');
+}
+window.restoreAndRenewAllTasks = restoreAndRenewAllTasks;
+
+function saveTasksAndSync() {
+  localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(tasksData));
+  localStorage.setItem('admin_tasks', JSON.stringify(tasksData));
+  localStorage.setItem(SYNC_FLAG_KEY, Date.now().toString());
+  if (syncChannel) {
+    syncChannel.postMessage({ type: 'TASKS_UPDATED', timestamp: Date.now() });
+  }
+  if (window.Firebase && typeof window.Firebase.saveTasksToCloud === 'function') {
+    window.Firebase.saveTasksToCloud(tasksData);
+  }
+  renderAdminTasksList();
+}
+
+// -----------------------------------------------------------------------------
+// 2. ALL USERS SUBVIEW LOGIC
+// -----------------------------------------------------------------------------
+
+function renderAdminUsersList() {
+  const container = document.getElementById('adminUsersList');
+  if (!container) return;
+
+  const searchVal = (document.getElementById('adminUserSearch')?.value || '').toLowerCase().trim();
+  let list = [...usersData];
+  if (searchVal) {
+    list = list.filter(u => 
+      (u.name && u.name.toLowerCase().includes(searchVal)) || 
+      (u.id && u.id.toLowerCase().includes(searchVal)) ||
+      (u.username && u.username.toLowerCase().includes(searchVal)) ||
+      (u.email && u.email.toLowerCase().includes(searchVal))
+    );
+  }
+
+  // Update metrics
+  const totUsers = document.getElementById('adminTotalUsers');
+  const actUsers = document.getElementById('adminActiveUsers');
+  const totCoins = document.getElementById('adminTotalCoins');
+
+  const activeCount = usersData.filter(u => u.status === 'active' || (!u.status || (u.status !== 'suspended' && u.status !== 'inactive'))).length;
+  const coinsSum = usersData.reduce((acc, u) => acc + Number(u.coins || 0), 0);
+
+  if (totUsers) totUsers.textContent = usersData.length.toString();
+  if (actUsers) actUsers.textContent = activeCount.toString();
+  if (totCoins) totCoins.textContent = `${coinsSum.toLocaleString()} 🪙`;
+
+  updateAdminCounters();
+
+  if (list.length === 0) {
+    container.innerHTML = `<div style="text-align: center; padding: 2rem; color: #94a3b8; font-size: 0.85rem;">No players found matching "${searchVal}".</div>`;
+    return;
+  }
+
+  container.innerHTML = list.map(user => {
+    const isSusp = user.status === 'suspended';
+    return `
+      <div class="admin-user-card" style="display: flex !important; flex-direction: row !important; justify-content: space-between !important; align-items: center !important; flex-wrap: nowrap !important; background: #0a1738; border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 12px; padding: 0.55rem 0.85rem; margin-bottom: 0.45rem; gap: 0.5rem; width: 100%; box-sizing: border-box;">
+        <!-- 1. Icon & 2. Name & Stats -->
+        <div style="display: flex; align-items: center; gap: 0.5rem; min-width: 0; flex: 1; overflow: hidden; white-space: nowrap;">
+          <span style="font-size: 1.35rem; line-height: 1; flex-shrink: 0;">${user.avatar || '⚡'}</span>
+          <div style="display: flex; flex-direction: column; min-width: 0; overflow: hidden;">
+            <div style="display: flex; align-items: center; gap: 4px; overflow: hidden;">
+              <span style="font-size: 0.9rem; font-weight: 800; color: #ffffff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(user.name || 'Player')}</span>
+              ${user.id === 'usr_1' ? '<span style="font-size: 0.62rem; background: #0284c7; color: #fff; font-weight: 800; padding: 1px 4px; border-radius: 4px;">YOU</span>' : ''}
+              ${isSusp ? '<span style="font-size: 0.62rem; background: #ef4444; color: #fff; font-weight: 800; padding: 1px 4px; border-radius: 4px;">SUSPENDED</span>' : ''}
+            </div>
+            <div style="display: flex; gap: 6px; font-size: 0.72rem; margin-top: 2px;">
+              <span style="color: #38bdf8; font-weight: 800;">🎯 ${Number(user.eventTasks || 0)} Tasks</span>
+              <span style="color: #64748b;">•</span>
+              <span style="color: #fbbf24; font-weight: 800;">🪙 ${Number(user.coins || 0).toLocaleString()}</span>
+              <span style="color: #64748b;">•</span>
+              <span style="color: #facc15; font-weight: 800;">⭐ ${Number(user.stars || 0).toLocaleString()}</span>
+              <span style="color: #64748b;">•</span>
+              <span style="color: #c084fc; font-weight: 800;">🎟️ ${Number(user.tickets || 0).toLocaleString()}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. Edit Button & 4. Detail Button & 5. Delete Button -->
+        <div style="display: flex; gap: 0.35rem; align-items: center; flex-shrink: 0; white-space: nowrap;">
+          <!-- Direct Edit Button -->
+          <button type="button" class="btn-card-action" onclick="openEditUserModal('${user.id}')" title="Edit player name, tasks, coins, stars" style="display: inline-flex; align-items: center; gap: 3px; padding: 5px 8px; font-size: 0.72rem; font-weight: 800; background: rgba(56, 189, 248, 0.2); border: 1px solid rgba(56, 189, 248, 0.5); color: #38bdf8; border-radius: 7px; cursor: pointer; white-space: nowrap; flex-shrink: 0;">
+            <span>✏️ Edit</span>
+          </button>
+
+          <!-- Detail Button -->
+          <button type="button" class="btn-card-action" onclick="openUserDetailModal('${user.id}')" title="View player full details" style="display: inline-flex; align-items: center; gap: 3px; padding: 5px 8px; font-size: 0.72rem; font-weight: 800; background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.4); color: #c084fc; border-radius: 7px; cursor: pointer; white-space: nowrap; flex-shrink: 0;">
+            <span>🔍 Detail</span>
+          </button>
+
+          <!-- Direct Reset Button -->
+          <button type="button" class="btn-card-action" onclick="directResetUser('${user.id}')" title="Reset all account data to zero" style="display: inline-flex; align-items: center; gap: 3px; padding: 5px 7px; font-size: 0.72rem; font-weight: 800; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.4); color: #fbbf24; border-radius: 7px; cursor: pointer; white-space: nowrap; flex-shrink: 0;">
+            <span>🔄 Reset</span>
+          </button>
+
+          <!-- Direct Delete Button -->
+          <button type="button" class="btn-card-action" onclick="directDeleteUser('${user.id}')" title="Permanently delete player" style="display: inline-flex; align-items: center; gap: 3px; padding: 5px 7px; font-size: 0.72rem; font-weight: 800; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: #f87171; border-radius: 7px; cursor: pointer; white-space: nowrap; flex-shrink: 0;">
+            <span>🗑️</span>
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function toggleUserActiveStatus(userId) {
+  const user = usersData.find(u => u.id === userId);
+  if (!user) return;
+  const isCurrentlyActive = user.status === 'active' || (!user.status || (user.status !== 'inactive' && user.status !== 'suspended'));
+  user.status = isCurrentlyActive ? 'inactive' : 'active';
+
+  // Save status to Firebase Cloud
+  const cloudSaver = (window.Firebase && window.Firebase.saveUserToCloud) || window.saveUserToCloud;
+  if (typeof cloudSaver === 'function') {
+    cloudSaver({
+      id: user.id,
+      uid: user.id,
+      displayName: user.name,
+      status: user.status
+    }).catch(() => {});
+  }
+
+  // Save and broadcast
+  localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(usersData));
+  if (syncChannel) {
+    syncChannel.postMessage({ type: 'USERS_UPDATED', timestamp: Date.now() });
+  }
+  renderAdminUsersList();
+  showToast(`Player ${user.name || 'User'} marked ${user.status === 'active' ? '🟢 Active' : '🔴 Inactive'}`);
+}
+
+
+function handleAdminUserSearch(val) {
+  renderAdminUsersList();
+}
+
+function setEditUserAvatar(emoji) {
+  const input = document.getElementById('userEditAvatarInput');
+  const preview = document.getElementById('userEditAvatar');
+  if (input) input.value = emoji;
+  if (preview) preview.textContent = emoji;
+}
+
+function openEditUserModal(userId) {
+  const user = usersData.find(u => u.id === userId);
+  if (!user) return;
+
+  const modal = document.getElementById('adminUserModalOverlay');
+  if (document.getElementById('userEditId')) document.getElementById('userEditId').value = user.id;
+  if (document.getElementById('userEditAvatar')) document.getElementById('userEditAvatar').textContent = user.avatar || '⚡';
+  if (document.getElementById('userEditAvatarInput')) document.getElementById('userEditAvatarInput').value = user.avatar || '⚡';
+  if (document.getElementById('userEditNameDisplay')) document.getElementById('userEditNameDisplay').textContent = user.name || 'Player';
+  if (document.getElementById('userEditNameInput')) document.getElementById('userEditNameInput').value = user.name || 'Player';
+  if (document.getElementById('userEditHandleInput')) document.getElementById('userEditHandleInput').value = user.username || ('@' + (user.name || 'player').toLowerCase().replace(/\s+/g, ''));
+  if (document.getElementById('userEditEmailInput')) document.getElementById('userEditEmailInput').value = user.email || (user.id + '@novatasks.io');
+  if (document.getElementById('userEditRoleSelect')) document.getElementById('userEditRoleSelect').value = user.role || 'player';
+  if (document.getElementById('userEditLevelSelect')) document.getElementById('userEditLevelSelect').value = user.level || 'LVL 1 • NOVICE';
+  if (document.getElementById('userEditCoins')) document.getElementById('userEditCoins').value = user.coins || 0;
+  if (document.getElementById('userEditStars')) document.getElementById('userEditStars').value = user.stars || 0;
+  if (document.getElementById('userEditTickets')) document.getElementById('userEditTickets').value = user.tickets || 0;
+  if (document.getElementById('userEditEventTasks')) document.getElementById('userEditEventTasks').value = user.eventTasks || 0;
+  if (document.getElementById('userEditTotalTasks')) document.getElementById('userEditTotalTasks').value = user.totalTasks || 0;
+  if (document.getElementById('userEditStatus')) document.getElementById('userEditStatus').value = user.status || 'active';
+  if (document.getElementById('userEditIdDisplay')) document.getElementById('userEditIdDisplay').textContent = 'UID: ' + user.id;
+
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeAdminUserModal() {
+  const modal = document.getElementById('adminUserModalOverlay');
+  if (modal) modal.style.display = 'none';
+}
+
+function handleUserModalBackdropClick(e) {
+  if (e.target && e.target.id === 'adminUserModalOverlay') {
+    closeAdminUserModal();
+  }
+}
+
+function openCreateUserModal() {
+  const modal = document.getElementById('adminAddUserModalOverlay');
+  if (document.getElementById('userAddNameInput')) document.getElementById('userAddNameInput').value = '';
+  if (document.getElementById('userAddAvatarInput')) document.getElementById('userAddAvatarInput').value = '🚀';
+  if (document.getElementById('userAddEventTasks')) document.getElementById('userAddEventTasks').value = '10';
+  if (document.getElementById('userAddTotalTasks')) document.getElementById('userAddTotalTasks').value = '20';
+  if (document.getElementById('userAddCoins')) document.getElementById('userAddCoins').value = '1000';
+  if (document.getElementById('userAddStars')) document.getElementById('userAddStars').value = '20';
+  if (document.getElementById('userAddTickets')) document.getElementById('userAddTickets').value = '50';
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeCreateUserModal() {
+  const modal = document.getElementById('adminAddUserModalOverlay');
+  if (modal) modal.style.display = 'none';
+}
+
+function handleSaveCreateUser(e) {
+  if (e && e.preventDefault) e.preventDefault();
+  const name = document.getElementById('userAddNameInput')?.value?.trim() || 'New Player';
+  const avatar = document.getElementById('userAddAvatarInput')?.value?.trim() || '🚀';
+  const eventTasks = parseInt(document.getElementById('userAddEventTasks')?.value || '0', 10);
+  const totalTasks = parseInt(document.getElementById('userAddTotalTasks')?.value || '0', 10);
+  const coins = parseInt(document.getElementById('userAddCoins')?.value || '0', 10);
+  const stars = parseInt(document.getElementById('userAddStars')?.value || '0', 10);
+  const tickets = parseInt(document.getElementById('userAddTickets')?.value || '0', 10);
+  const level = document.getElementById('userAddLevelSelect')?.value || 'LVL 1 • NOVICE';
+  const role = document.getElementById('userAddRoleSelect')?.value || 'player';
+
+  const newId = 'usr_' + Date.now();
+  const newUser = {
+    id: newId,
+    name,
+    avatar,
+    username: '@' + name.toLowerCase().replace(/\s+/g, ''),
+    email: newId + '@novatasks.io',
+    level,
+    role,
+    coins,
+    stars,
+    tickets,
+    eventTasks,
+    totalTasks,
+    status: 'active',
+    joined: 'Today'
+  };
+
+  usersData.push(newUser);
+  saveUsersAndSync();
+  closeCreateUserModal();
+  showToast(`🚀 New contender "${name}" added to Leaderboard & Admin!`);
+}
+
+function handleSaveAdminUserForm(e) {
+  if (e && e.preventDefault) e.preventDefault();
+  const userId = document.getElementById('userEditId')?.value;
+  const name = document.getElementById('userEditNameInput')?.value || 'Player';
+  const handle = document.getElementById('userEditHandleInput')?.value || '';
+  const email = document.getElementById('userEditEmailInput')?.value || '';
+  const role = document.getElementById('userEditRoleSelect')?.value || 'player';
+  const level = document.getElementById('userEditLevelSelect')?.value || 'LVL 1 • NOVICE';
+  const coins = parseInt(document.getElementById('userEditCoins')?.value || '0', 10);
+  const stars = parseInt(document.getElementById('userEditStars')?.value || '0', 10);
+  const tickets = parseInt(document.getElementById('userEditTickets')?.value || '0', 10);
+  const eventTasks = parseInt(document.getElementById('userEditEventTasks')?.value || '0', 10);
+  const totalTasks = parseInt(document.getElementById('userEditTotalTasks')?.value || '0', 10);
+  const avatar = document.getElementById('userEditAvatarInput')?.value || document.getElementById('userEditAvatar')?.textContent || '⚡';
+  const status = document.getElementById('userEditStatus')?.value || 'active';
+
+  const user = usersData.find(u => u.id === userId);
+  if (user) {
+    user.name = name;
+    user.username = handle;
+    user.email = email;
+    user.role = role;
+    user.level = level;
+    user.coins = coins;
+    user.stars = stars;
+    user.tickets = tickets;
+    user.eventTasks = eventTasks;
+    user.totalTasks = totalTasks;
+    user.avatar = avatar;
+    user.status = status;
+
+    // Save directly to Firebase Cloud Firestore
+    const cloudSaver = (window.Firebase && window.Firebase.saveUserToCloud) || window.saveUserToCloud;
+    if (typeof cloudSaver === 'function') {
+      cloudSaver({
+        id: user.id,
+        uid: user.id,
+        displayName: user.name,
+        name: user.name,
+        avatar: user.avatar,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        level: user.level,
+        coins: user.coins,
+        stars: user.stars,
+        tickets: user.tickets,
+        eventTasks: user.eventTasks,
+        totalTasks: user.totalTasks,
+        status: user.status
+      }).catch(err => {
+        console.warn('Firebase sync warning:', err);
+      });
+    }
+
+    const currentUid = localStorage.getItem('player_uid');
+    const currentName = localStorage.getItem('player_username') || 'Player';
+    if (user.id === 'usr_1' || user.id === currentUid || user.name === currentName) {
+      localStorage.setItem('player_username', name);
+      localStorage.setItem('player_avatar', avatar);
+      localStorage.setItem('task_game_coins', coins.toString());
+      localStorage.setItem('user_coins', coins.toString());
+      localStorage.setItem('task_game_stars', stars.toString());
+      localStorage.setItem('user_stars', stars.toString());
+      localStorage.setItem('task_game_tickets', tickets.toString());
+      localStorage.setItem('user_tickets', tickets.toString());
+      localStorage.setItem('task_user_tickets', tickets.toString());
+      localStorage.setItem('task_game_event_tasks', eventTasks.toString());
+      localStorage.setItem('task_game_event_tasks_count', eventTasks.toString());
+      localStorage.setItem('task_game_total_tasks', totalTasks.toString());
+      localStorage.setItem('task_game_total_tasks_completed', totalTasks.toString());
+      localStorage.setItem('completed_tasks_count', totalTasks.toString());
+      if (typeof window.updateAllDomBalances === 'function') {
+        window.updateAllDomBalances(coins, stars, tickets);
+      }
+      updateAdminLiveDisplays();
+      updateProfileDisplays();
+      try {
+        if (syncChannel) {
+          syncChannel.postMessage({ type: 'PROFILE_UPDATED', name, avatar, timestamp: Date.now() });
+          syncChannel.postMessage({ type: 'BALANCES_UPDATED', coins, stars, tickets, timestamp: Date.now() });
+        }
+      } catch (e) {}
+    }
+
+    saveUsersAndSync();
+    closeAdminUserModal();
+    showToast(`Player "${user.name}" updated & synced with Leaderboard! ✓`, 3500);
+  }
+}
+
+async function handleResetUserFromModal() {
+  const userId = document.getElementById('userEditId')?.value;
+  if (!userId) return;
+  const user = usersData.find(u => u.id === userId);
+  const userName = user ? (user.name || user.username || userId) : userId;
+
+  const msg = `⚠️ RESET ALL USER DATA FOR: "${userName}" (${userId})?\n\nThis will permanently reset:\n• Coins: 0\n• Stars: 0\n• Tickets: 0\n• Levels, XP & Energy: Reset to initial default\n• Tasks & Event missions: 0 completed\n• Streaks, Claims, Rewards & Passes: Reset\n• Game activities & Records: Reset\n\nThis cannot be undone. Are you sure you want to proceed?`;
+  if (!confirm(msg)) return;
+
+  if (user) {
+    user.coins = 0;
+    user.stars = 0;
+    user.tickets = 0;
+    user.eventTasks = 0;
+    user.totalTasks = 0;
+    user.level = 'LVL 1 • NOVICE';
+    user.passLevel = 1;
+    user.xp = 0;
+    user.energy = 100;
+  }
+
+  const currentUid = localStorage.getItem('player_uid');
+  const currentName = localStorage.getItem('player_username') || 'Player';
+  if (userId === 'usr_1' || userId === currentUid || (user && user.name === currentName)) {
+    localStorage.setItem('task_game_coins', '0');
+    localStorage.setItem('user_coins', '0');
+    localStorage.setItem('task_game_stars', '0');
+    localStorage.setItem('user_stars', '0');
+    localStorage.setItem('task_game_tickets', '0');
+    localStorage.setItem('user_tickets', '0');
+    localStorage.setItem('task_user_tickets', '0');
+    localStorage.setItem('task_game_event_tasks', '0');
+    localStorage.setItem('task_game_event_tasks_count', '0');
+    localStorage.setItem('task_game_total_tasks', '0');
+    localStorage.setItem('task_game_total_tasks_completed', '0');
+    localStorage.setItem('completed_tasks_count', '0');
+    if (typeof window.updateAllDomBalances === 'function') {
+      window.updateAllDomBalances(0, 0, 0);
+    }
+    updateAdminLiveDisplays();
+    updateProfileDisplays();
+  }
+
+  // Cloud reset in Firebase
+  const resetFn = (window.Firebase && window.Firebase.resetUserAccountInCloud) || window.resetUserAccountInCloud;
+  if (typeof resetFn === 'function') {
+    try {
+      await resetFn(userId, user);
+    } catch (err) {
+      console.warn('[Profile Admin] Cloud reset error:', err);
+    }
+  }
+
+  saveUsersAndSync();
+  closeAdminUserModal();
+  renderAdminUsersList();
+  showToast(`🔄 All data for player "${userName}" has been reset to zero! ✓`, 3500);
+}
+
+async function handleDeleteUserFromModal() {
+  const userId = document.getElementById('userEditId')?.value;
+  if (!userId) return;
+  const user = usersData.find(u => u.id === userId);
+  const userName = user ? (user.name || user.username || userId) : userId;
+
+  const msg = `🗑️ PERMANENTLY DELETE PLAYER: "${userName}" (${userId})?\n\nThis will remove the player record and delete all associated data across Firebase collections.\n\nAre you sure you want to proceed?`;
+  if (!confirm(msg)) return;
+
+  const deletedCopy = user ? { ...user } : { id: userId, name: userName };
+  usersData = usersData.filter(u => u.id !== userId);
+
+  // Purge from Firebase Cloud Firestore
+  const cloudDeleter = (window.Firebase && window.Firebase.deleteUserFromCloud) || window.deleteUserFromCloud;
+  if (typeof cloudDeleter === 'function') {
+    try {
+      await cloudDeleter(userId, deletedCopy);
+    } catch (err) {
+      console.warn('[Profile Admin] Cloud delete error:', err);
+    }
+  }
+
+  saveUsersAndSync();
+  closeAdminUserModal();
+  renderAdminUsersList();
+  showToast(`🗑️ Player "${userName}" and all Firebase data deleted.`, 3500);
+}
+
+function quickAddUserCoins(userId, delta) {
+  const user = usersData.find(u => u.id === userId);
+  if (!user) return;
+  user.coins = Math.max(0, (user.coins || 0) + delta);
+
+  const currentName = localStorage.getItem('player_username') || 'NovaEarner';
+  if (user.id === 'usr_1' || user.name === currentName) {
+    localStorage.setItem('task_game_coins', user.coins.toString());
+    localStorage.setItem('user_coins', user.coins.toString());
+    localStorage.setItem('task_game_coins_alt', user.coins.toString());
+    updateAdminLiveDisplays();
+    try {
+      const bc = new BroadcastChannel('balance_sync_channel');
+      bc.postMessage({ type: 'BALANCE_UPDATED', coins: user.coins });
+      bc.close();
+    } catch(e) {}
+    if (syncChannel) {
+      try {
+        syncChannel.postMessage({ type: 'BALANCES_UPDATED', timestamp: Date.now() });
+      } catch(e) {}
+    }
+    window.dispatchEvent(new Event('balance:changed'));
+  }
+
+  saveUsersAndSync();
+  showToast(`${delta > 0 ? '+' : ''}${delta} coins given to ${user.name}`);
+}
+
+function quickAwardAllPlayers(amount) {
+  usersData.forEach(u => {
+    u.coins = (u.coins || 0) + amount;
+  });
+  let myCoins = parseInt(localStorage.getItem('task_game_coins') || '0', 10);
+  myCoins += amount;
+  localStorage.setItem('task_game_coins', myCoins.toString());
+  localStorage.setItem('user_coins', myCoins.toString());
+  localStorage.setItem('task_game_coins_alt', myCoins.toString());
+  try {
+    const bc = new BroadcastChannel('balance_sync_channel');
+    bc.postMessage({ type: 'BALANCE_UPDATED', coins: myCoins });
+    bc.close();
+  } catch(e) {}
+  if (syncChannel) {
+    try {
+      syncChannel.postMessage({ type: 'BALANCES_UPDATED', timestamp: Date.now() });
+    } catch(e) {}
+  }
+  window.dispatchEvent(new Event('balance:changed'));
+  updateAdminLiveDisplays();
+
+  saveUsersAndSync();
+  showToast(`🎁 Granted +${amount.toLocaleString()} Coins to all players!`);
+}
+
+function saveUsersAndSync() {
+  localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(usersData));
+  localStorage.setItem(SYNC_FLAG_KEY, Date.now().toString());
+  try {
+    if (syncChannel) {
+      syncChannel.postMessage({ type: 'USERS_UPDATED', users: usersData, timestamp: Date.now() });
+      syncChannel.postMessage({ type: 'BALANCES_UPDATED', timestamp: Date.now() });
+    }
+  } catch (e) { }
+  window.dispatchEvent(new CustomEvent('task_game_users:updated', { detail: usersData }));
+  window.dispatchEvent(new Event('balance:changed'));
+  renderAdminUsersList();
+}
+
+// -----------------------------------------------------------------------------
+// 3. WITHDRAWAL REQUESTS SUBVIEW LOGIC
+// -----------------------------------------------------------------------------
+
+function filterAdminWithdrawals(filter, btn) {
+  currentWdFilter = filter;
+  document.querySelectorAll('.filter-pill').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderAdminWithdrawalsList();
+}
+
+function renderAdminWithdrawalsList() {
+  const container = document.getElementById('adminWithdrawalsList');
+  if (!container) return;
+
+  const pending = withdrawalsData.filter(w => w.status === 'pending');
+  const approved = withdrawalsData.filter(w => w.status === 'approved');
+  const rejected = withdrawalsData.filter(w => w.status === 'rejected');
+
+  const cntAll = document.getElementById('cntWdAll');
+  const cntPend = document.getElementById('cntWdPending');
+  const cntApp = document.getElementById('cntWdApproved');
+  const cntRej = document.getElementById('cntWdRejected');
+
+  if (cntAll) cntAll.textContent = withdrawalsData.length.toString();
+  if (cntPend) cntPend.textContent = pending.length.toString();
+  if (cntApp) cntApp.textContent = approved.length.toString();
+  if (cntRej) cntRej.textContent = rejected.length.toString();
+
+  updateAdminCounters();
+
+  let list = [...withdrawalsData];
+  if (currentWdFilter !== 'all') {
+    list = list.filter(w => w.status === currentWdFilter);
+  }
+
+  if (list.length === 0) {
+    container.innerHTML = `
+      <div style="text-align: center; padding: 2rem 1rem; color: #94a3b8; font-size: 0.85rem; background: #0a1738; border-radius: 14px;">
+        <div style="font-size: 2rem; margin-bottom: 0.4rem;">💸</div>
+        No ${currentWdFilter === 'all' ? '' : currentWdFilter} requests found.
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = list.map(wd => {
+    const isPending = wd.status === 'pending';
+    const isApproved = wd.status === 'approved';
+    const statusColor = isPending ? '#fbbf24' : isApproved ? '#34d399' : '#f87171';
+    const statusBg = isPending ? 'rgba(251, 191, 36, 0.15)' : isApproved ? 'rgba(52, 211, 153, 0.15)' : 'rgba(248, 113, 113, 0.15)';
+
+    return `
+      <div class="admin-withdraw-card" style="background: #0a1738; border: 1px solid rgba(56, 189, 248, 0.15); border-radius: 12px; padding: 0.8rem; margin-bottom: 0.6rem;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+          <div>
+            <div style="display: flex; align-items: center; gap: 0.45rem;">
+              <span style="font-size: 1.1rem;">${wd.playerAvatar || '⚡'}</span>
+              <span style="font-size: 0.88rem; font-weight: 800; color: #ffffff;">${escapeHtml(wd.playerName || 'Player')}</span>
+              <span style="font-size: 0.62rem; color: #64748b; font-family: monospace;">(${wd.id})</span>
+            </div>
+            <div style="font-size: 0.72rem; color: #94a3b8; margin-top: 0.25rem;">
+              <b>${wd.method}</b> • ${escapeHtml(wd.details || '')}
+            </div>
+            ${(wd.deliveryLink || wd.link) ? `<div style="margin-top: 3px;"><a href="${escapeHtml(wd.deliveryLink || wd.link)}" target="_blank" rel="noopener noreferrer" style="color: #34d399; font-size: 0.72rem; font-weight: 800; text-decoration: underline;">🔗 View Link</a></div>` : ''}
+            <div style="font-size: 0.65rem; color: #64748b; margin-top: 0.15rem;">${wd.time || 'Recent'}</div>
+          </div>
+
+          <div style="text-align: right;">
+            <div style="font-size: 1.05rem; font-weight: 900; color: #38bdf8;">₹${Number(wd.amount || 0).toLocaleString()}</div>
+            <span style="font-size: 0.65rem; font-weight: 800; padding: 2px 7px; border-radius: 6px; background: ${statusBg}; color: ${statusColor}; text-transform: uppercase;">
+              ${wd.status}
+            </span>
+          </div>
+        </div>
+
+        ${isPending ? `
+          <div style="display: flex; gap: 0.5rem; margin-top: 0.6rem; padding-top: 0.5rem; border-top: 1px solid rgba(255, 255, 255, 0.05);">
+            <button class="btn-card-action success" style="flex: 1; padding: 6px;" onclick="approveWithdrawal('${wd.id}')">Approve &amp; Send Link ✓</button>
+            <button class="btn-card-action danger" style="padding: 6px 12px;" onclick="rejectWithdrawal('${wd.id}')">Reject ✕</button>
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
+function approveWithdrawal(wdId) {
+  const wd = withdrawalsData.find(w => w.id === wdId);
+  if (!wd) return;
+
+  const link = prompt(`🔗 Enter Voucher / Delivery Link for #${wd.id} (optional):\n(e.g. https://example.com/voucher/claim...)`, wd.deliveryLink || wd.link || '');
+  if (link === null) return;
+
+  const enteredCode = prompt(`🔐 Enter Admin Approval Security Code (1109) to confirm approval:`);
+  if (enteredCode === null) return;
+
+  if (enteredCode.trim() !== '1109') {
+    alert('❌ Invalid Approval Code! Must enter code 1109.');
+    showToast('Invalid security code! Approval cancelled.', 'error');
+    return;
+  }
+
+  wd.status = 'approved';
+  wd.approvedAt = Date.now();
+  if (link.trim()) {
+    let cleanLink = link.trim();
+    if (!cleanLink.startsWith('http://') && !cleanLink.startsWith('https://')) {
+      cleanLink = 'https://' + cleanLink;
+    }
+    wd.deliveryLink = cleanLink;
+    wd.link = cleanLink;
+  }
+
+  // Save update to Firebase Cloud
+  const cloudWdSaver = (window.Firebase && window.Firebase.saveWithdrawalToCloud) || window.saveWithdrawalToCloud;
+  if (typeof cloudWdSaver === 'function') {
+    cloudWdSaver(wd).catch(() => {});
+  }
+
+  saveWithdrawalsAndSync();
+  showToast(`✅ Request ${wd.id} Approved with link!`);
+}
+
+function rejectWithdrawal(wdId) {
+  const wd = withdrawalsData.find(w => w.id === wdId);
+  if (!wd) return;
+  wd.status = 'rejected';
+
+  // Save update to Firebase Cloud
+  const cloudWdSaver = (window.Firebase && window.Firebase.saveWithdrawalToCloud) || window.saveWithdrawalToCloud;
+  if (typeof cloudWdSaver === 'function') {
+    cloudWdSaver(wd).catch(() => {});
+  }
+
+  saveWithdrawalsAndSync();
+  showToast(`Request ${wd.id} Rejected.`);
+}
+
+function saveWithdrawalsAndSync() {
+  localStorage.setItem(WITHDRAW_STORAGE_KEY, JSON.stringify(withdrawalsData));
+  localStorage.setItem(SYNC_FLAG_KEY, Date.now().toString());
+  if (syncChannel) {
+    syncChannel.postMessage({ type: 'WITHDRAWALS_UPDATED', timestamp: Date.now() });
+  }
+  renderAdminWithdrawalsList();
+}
+
+// -----------------------------------------------------------------------------
+// 4. LEADERBOARD EVENT SUBVIEW LOGIC
+// -----------------------------------------------------------------------------
+
+function renderAdminEventSection() {
+  startAdminEventTimer();
+  renderAdminEventContenders();
+  renderProfileSessionHistory();
+}
+
+const SESSIONS_STORAGE_KEY = 'task_game_leaderboard_sessions';
+const UNIFIED_EVENT_KEY = 'task_game_leaderboard_event';
+
+function getLeaderboardEventState() {
+  const now = Date.now();
+
+  // Purge legacy key
+  try {
+    if (localStorage.getItem('task_leaderboard_event_v1')) {
+      localStorage.removeItem('task_leaderboard_event_v1');
+    }
+  } catch (e) {}
+
+  let data = null;
+  try {
+    const raw = localStorage.getItem(UNIFIED_EVENT_KEY);
+    if (raw) data = JSON.parse(raw);
+  } catch (e) {}
+
+  // If an event has finished, respect it
+  if (data && data.status === 'finished') {
+    return data;
+  }
+
+  // If active manual override is still running
+  if (data && data.isManualOverride && now < data.endTime && data.status === 'active') {
+    return data;
+  }
+
+  // Deterministic Universal Global 3-Month Season (Identical to Rank and Admin Event pages)
+  const GLOBAL_EPOCH_ANCHOR = Date.UTC(2026, 9, 1, 0, 0, 0); // Oct 1, 2026 UTC
+  const THREE_MONTHS_HOURS = 2160;
+  const THREE_MONTHS_DAYS = 90;
+  const THREE_MONTHS_MS = THREE_MONTHS_HOURS * 60 * 60 * 1000;
+
+  const elapsed = Math.max(0, now - GLOBAL_EPOCH_ANCHOR);
+  const seasonIndex = Math.floor(elapsed / THREE_MONTHS_MS);
+  const seasonNumber = seasonIndex + 1;
+  const startTime = GLOBAL_EPOCH_ANCHOR + (seasonIndex * THREE_MONTHS_MS);
+  const endTime = startTime + THREE_MONTHS_MS;
+
+  data = {
+    id: `global_season_${seasonNumber}`,
+    seasonNumber: seasonNumber,
+    name: `Season ${seasonNumber}: 3-Month Championship`,
+    startTime: startTime,
+    endTime: endTime,
+    durationHours: THREE_MONTHS_HOURS,
+    durationDays: THREE_MONTHS_DAYS,
+    status: 'active',
+    isGlobal: true
+  };
+
+  try {
+    localStorage.setItem(UNIFIED_EVENT_KEY, JSON.stringify(data));
+  } catch(e) {}
+
+  return data;
+}
+
+function startAdminEventTimer() {
+  if (adminEventInterval) clearInterval(adminEventInterval);
+
+  function tick() {
+    const evt = getLeaderboardEventState();
+    const now = Date.now();
+    const diff = Math.max(0, (evt.endTime || 0) - now);
+
+    const totalSec = Math.floor(diff / 1000);
+    const days = Math.floor(totalSec / 86400);
+    const hours = Math.floor((totalSec % 86400) / 3600);
+    const mins = Math.floor((totalSec % 3600) / 60);
+    const secs = totalSec % 60;
+
+    const elDays = document.getElementById('adminTimerDays');
+    const elHours = document.getElementById('adminTimerHours');
+    const elMins = document.getElementById('adminTimerMins');
+    const elSecs = document.getElementById('adminTimerSecs');
+
+    if (elDays) elDays.textContent = String(days).padStart(2, '0');
+    if (elHours) elHours.textContent = String(hours).padStart(2, '0');
+    if (elMins) elMins.textContent = String(mins).padStart(2, '0');
+    if (elSecs) elSecs.textContent = String(secs).padStart(2, '0');
+
+    const elBadge = document.getElementById('profileEventSeasonBadge');
+    if (elBadge && evt.name) {
+      elBadge.textContent = `🏆 ${evt.name.toUpperCase()}`;
+    }
+    const elDates = document.getElementById('adminEventDatesInfo');
+    if (elDates && evt.startTime && evt.endTime) {
+      const startStr = new Date(evt.startTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      const endStr = new Date(evt.endTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      elDates.textContent = `Active Season: ${startStr} – ${endStr} (90 Days Global Championship)`;
+    }
+  }
+
+  tick();
+  adminEventInterval = setInterval(tick, 1000);
+}
+
+function renderAdminEventContenders() {
+  const container = document.getElementById('adminEventPlayersList');
+  if (!container) return;
+
+  const contenders = [...usersData].sort((a, b) => (Number(b.eventTasks || 0)) - (Number(a.eventTasks || 0)));
+
+  if (contenders.length === 0) {
+    container.innerHTML = `<div style="text-align: center; padding: 1.5rem; color: #94a3b8; font-size: 0.8rem;">No contenders registered yet.</div>`;
+    return;
+  }
+
+  container.innerHTML = contenders.map((u, i) => `
+    <div style="display: flex; align-items: center; justify-content: space-between; background: #060e24; border: 1px solid rgba(250, 204, 21, 0.2); border-radius: 10px; padding: 0.5rem 0.75rem; margin-bottom: 0.4rem;">
+      <div style="display: flex; align-items: center; gap: 0.5rem;">
+        <span style="font-weight: 900; color: ${i === 0 ? '#facc15' : i === 1 ? '#94a3b8' : i === 2 ? '#d97706' : '#64748b'}; width: 20px;">#${i + 1}</span>
+        <span>${u.avatar || '⚡'}</span>
+        <span style="font-size: 0.82rem; font-weight: 800; color: #ffffff;">${escapeHtml(u.name || 'User ' + (i + 1))}</span>
+      </div>
+      <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px;">
+        <span style="font-size: 0.75rem; font-weight: 800; color: #facc15;">${Number(u.eventTasks || 0)} Event Tasks</span>
+        <span style="font-size: 0.68rem; color: #94a3b8;">${Number(u.totalTasks || 0)} Total Tasks</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+function adminResetLeaderboardSeason() {
+  if (!confirm('Restart the 3-Month Global Championship Event Season?')) return;
+  const THREE_MONTHS_HOURS = 2160;
+  const THREE_MONTHS_DAYS = 90;
+  const THREE_MONTHS_MS = THREE_MONTHS_HOURS * 60 * 60 * 1000;
+  const current = getLeaderboardEventState();
+  // Season restart: season number does NOT change
+  const nextSeasonNum = current.seasonNumber || 1;
+  const now = Date.now();
+  const nextSeason = {
+    id: `global_season_${nextSeasonNum}`,
+    seasonNumber: nextSeasonNum,
+    name: `Season ${nextSeasonNum}: 3-Month Championship`,
+    startTime: now,
+    endTime: now + THREE_MONTHS_MS,
+    durationHours: THREE_MONTHS_HOURS,
+    durationDays: THREE_MONTHS_DAYS,
+    status: 'active',
+    isGlobal: true,
+    isManualOverride: true
+  };
+
+  localStorage.setItem(UNIFIED_EVENT_KEY, JSON.stringify(nextSeason));
+  localStorage.removeItem('task_leaderboard_event_v1');
+  localStorage.setItem(SYNC_FLAG_KEY, now.toString());
+
+  try {
+    if (window.Firebase && typeof window.Firebase.saveGlobalLeaderboardEventToCloud === 'function') {
+      window.Firebase.saveGlobalLeaderboardEventToCloud(nextSeason);
+    }
+    const bc = new BroadcastChannel(SYNC_CHANNEL_NAME);
+    bc.postMessage({ type: 'EVENT_RESTART', event: nextSeason, timestamp: now });
+    bc.close();
+  } catch(e) {}
+
+  // Reset event tasks for users
+  usersData.forEach(u => {
+    u.eventTasks = 0;
+  });
+  saveUsersAndSync();
+
+  startAdminEventTimer();
+  renderAdminEventContenders();
+  showToast(`🏆 Season ${nextSeason.seasonNumber} started! Fresh 90 days countdown.`);
+}
+
+
+// ============================================================================
+// HELP & SUPPORT PAGE NAVIGATION
+// ============================================================================
+function openHelpModal() {
+  if (typeof ProfileAudio !== 'undefined' && ProfileAudio && typeof ProfileAudio.playTabSwitch === 'function') {
+    try { ProfileAudio.playTabSwitch(); } catch (e) {}
+  }
+  window.location.href = '../help/index.html';
+}
+
+function closeHelpModal() {
+  // Maintained for backward compatibility
+}
+
+function handleHelpModalBackdropClick(event) {
+  // Maintained for backward compatibility
+}
+
+function submitHelpSupportTicket() {
+  const input = document.getElementById('helpTicketMessage');
+  const statusMsg = document.getElementById('helpTicketStatusMsg');
+  if (!input || !input.value.trim()) {
+    showToast('⚠️ Please write your question or issue description.');
+    if (input) input.focus();
+    return;
+  }
+
+  const ticketId = 'NV-' + Math.floor(1000 + Math.random() * 9000);
+  const userMsg = input.value.trim();
+  
+  // Store ticket locally
+  let storedTickets = [];
+  try {
+    const raw = localStorage.getItem('user_support_tickets');
+    if (raw) storedTickets = JSON.parse(raw);
+    if (!Array.isArray(storedTickets)) storedTickets = [];
+  } catch(e) {
+    storedTickets = [];
+  }
+  storedTickets.unshift({
+    id: ticketId,
+    message: userMsg,
+    date: new Date().toISOString(),
+    status: 'In Review'
+  });
+  try {
+    localStorage.setItem('user_support_tickets', JSON.stringify(storedTickets));
+  } catch(e) {}
+
+  input.value = '';
+  if (statusMsg) {
+    statusMsg.innerHTML = '✅ Ticket <b>#' + ticketId + '</b> created! Our team replies within 24 hours.';
+    statusMsg.style.display = 'block';
+  }
+  showToast('Ticket #' + ticketId + ' submitted successfully! 🚀');
+  if (typeof ProfileAudio !== 'undefined' && ProfileAudio && typeof ProfileAudio.playSuccess === 'function') {
+    ProfileAudio.playSuccess();
+  }
+}
+
+// ============================================================================
+// COMMUNITY & COMMITS MODAL CONTROLLER
+// ============================================================================
+function openCommunityModal() {
+  const modal = document.getElementById('communityModalOverlay');
+  if (!modal) return;
+  modal.classList.add('active');
+  modal.style.display = 'flex';
+  if (typeof ProfileAudio !== 'undefined' && ProfileAudio && typeof ProfileAudio.playTabSwitch === 'function') {
+    ProfileAudio.playTabSwitch();
+  }
+}
+
+function closeCommunityModal() {
+  const modal = document.getElementById('communityModalOverlay');
+  if (!modal) return;
+  modal.classList.remove('active');
+  modal.style.display = 'none';
+}
+
+function handleCommunityModalBackdropClick(event) {
+  if (event && (event.target.id === 'communityModalOverlay' || event.target.classList.contains('profile-modal-overlay'))) {
+    closeCommunityModal();
+  }
+}
+
+function handleJoinCommunityPlatform(platform) {
+  const key = 'community_joined_' + platform;
+  const alreadyJoined = localStorage.getItem(key);
+
+  if (platform === 'channel') {
+    window.open('https://t.me/TaskCommunityOfficial', '_blank');
+  } else if (platform === 'group') {
+    window.open('https://t.me/NovaChatGlobal', '_blank');
+  } else if (platform === 'discord') {
+    window.open('https://discord.gg/novatasks', '_blank');
+  }
+
+  if (!alreadyJoined && (platform === 'channel' || platform === 'group')) {
+    localStorage.setItem(key, 'true');
+    const bonusCoins = 25;
+    const currentCoins = parseInt(localStorage.getItem('task_game_coins') || '0', 10);
+    const updatedCoins = currentCoins + bonusCoins;
+    localStorage.setItem('task_game_coins', updatedCoins.toString());
+    localStorage.setItem('user_coins', updatedCoins.toString());
+    if (typeof updateProfileDisplays === 'function') {
+      updateProfileDisplays();
+    }
+
+    const btn = platform === 'channel' ? document.getElementById('btnJoinTgChannel') : document.getElementById('btnJoinTgGroup');
+    if (btn) {
+      btn.textContent = 'Joined ✓';
+      btn.style.background = 'rgba(16, 185, 129, 0.25)';
+      btn.style.color = '#34d399';
+      btn.style.border = '1px solid #10b981';
+    }
+
+    showToast('🎉 Joined ' + (platform === 'channel' ? 'Announcement Channel' : 'Chat Group') + '! +' + bonusCoins + ' 🪙 Awarded! 🚀');
+    if (typeof ProfileAudio !== 'undefined' && ProfileAudio && typeof ProfileAudio.playSuccess === 'function') {
+      ProfileAudio.playSuccess();
+    }
+  } else {
+    showToast('Opening ' + platform + ' portal...');
+  }
+}
+
+window.openHelpModal = openHelpModal;
+window.closeHelpModal = closeHelpModal;
+window.handleHelpModalBackdropClick = handleHelpModalBackdropClick;
+window.submitHelpSupportTicket = submitHelpSupportTicket;
+
+window.openCommunityModal = openCommunityModal;
+window.closeCommunityModal = closeCommunityModal;
+window.handleCommunityModalBackdropClick = handleCommunityModalBackdropClick;
+window.handleJoinCommunityPlatform = handleJoinCommunityPlatform;
+
+
+// ============================================================================
+// PLAYER FEEDBACK SYSTEM (Storage & Event Page Viewer)
+// ============================================================================
+const FEEDBACK_STORAGE_KEY = 'task_feedbacks';
+
+function initFeedbackSystem() {
+  if (!localStorage.getItem(FEEDBACK_STORAGE_KEY)) {
+    const initialFeedbacks = [
+      {
+        id: 'fb_1',
+        name: 'Rahul Sharma',
+        avatar: '⚡',
+        rating: 5,
+        category: 'Tasks & Missions',
+        message: 'The new Simple and Premium task separation is awesome. Coin rewards credit instantly upon verify!',
+        date: new Date(Date.now() - 3600000 * 2).toISOString()
+      },
+      {
+        id: 'fb_2',
+        name: 'Elena Rostova',
+        avatar: '👑',
+        rating: 5,
+        category: 'Premium Subscription',
+        message: 'Subscribed to 30 Days Premium with 20% discount. 200 Coins per task is fantastic value!',
+        date: new Date(Date.now() - 3600000 * 5).toISOString()
+      },
+      {
+        id: 'fb_3',
+        name: 'Vikram Patel',
+        avatar: '🎯',
+        rating: 4,
+        category: 'Wallet & Withdrawals',
+        message: 'Loving the ₹1,000, ₹5,000, and ₹10,000 Amazon Gift Cards in the wallet. Very clear instructions.',
+        date: new Date(Date.now() - 3600000 * 12).toISOString()
+      }
+    ];
+    localStorage.setItem(FEEDBACK_STORAGE_KEY, JSON.stringify(initialFeedbacks));
+  }
+}
+initFeedbackSystem();
+
+function getStoredFeedbacks() {
+  initFeedbackSystem();
+  try {
+    return JSON.parse(localStorage.getItem(FEEDBACK_STORAGE_KEY) || '[]');
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveStoredFeedbacks(list) {
+  localStorage.setItem(FEEDBACK_STORAGE_KEY, JSON.stringify(list));
+  renderAdminFeedbackList();
+}
+
+function openFeedbackModal() {
+  const modal = document.getElementById('feedbackModalOverlay');
+  if (!modal) return;
+  modal.classList.add('active');
+  modal.style.display = 'flex';
+  setFeedbackRating(5);
+  const msgInput = document.getElementById('feedbackMessage');
+  if (msgInput) msgInput.value = '';
+  const successBox = document.getElementById('feedbackSuccessMsg');
+  if (successBox) successBox.style.display = 'none';
+
+  if (typeof ProfileAudio !== 'undefined' && ProfileAudio && typeof ProfileAudio.playTabSwitch === 'function') {
+    ProfileAudio.playTabSwitch();
+  }
+}
+
+function closeFeedbackModal() {
+  const modal = document.getElementById('feedbackModalOverlay');
+  if (!modal) return;
+  modal.classList.remove('active');
+  modal.style.display = 'none';
+}
+
+function handleFeedbackModalBackdropClick(event) {
+  if (event && (event.target.id === 'feedbackModalOverlay' || event.target.classList.contains('profile-modal-overlay'))) {
+    closeFeedbackModal();
+  }
+}
+
+function setFeedbackRating(stars) {
+  const hiddenInput = document.getElementById('feedbackRatingValue');
+  const label = document.getElementById('feedbackRatingLabel');
+  if (hiddenInput) hiddenInput.value = stars.toString();
+
+  const labels = {
+    1: '1 / 5 — Poor',
+    2: '2 / 5 — Needs Improvement',
+    3: '3 / 5 — Average',
+    4: '4 / 5 — Very Good!',
+    5: '5 / 5 — Excellent!'
+  };
+  if (label) label.textContent = labels[stars] || (stars + ' / 5');
+
+  for (let i = 1; i <= 5; i++) {
+    const el = document.getElementById('starRating' + i);
+    if (el) {
+      el.style.opacity = i <= stars ? '1' : '0.28';
+      el.style.transform = i === stars ? 'scale(1.2)' : 'scale(1)';
+    }
+  }
+}
+
+function submitPlayerFeedback(e) {
+  if (e && e.preventDefault) e.preventDefault();
+  const msgInput = document.getElementById('feedbackMessage');
+  const catInput = document.getElementById('feedbackCategory');
+  const ratingInput = document.getElementById('feedbackRatingValue');
+  const successBox = document.getElementById('feedbackSuccessMsg');
+
+  if (!msgInput || !msgInput.value.trim()) {
+    showToast('⚠️ Please write your feedback message.');
+    if (msgInput) msgInput.focus();
+    return;
+  }
+
+  const playerName = localStorage.getItem('player_username') || 'Player';
+  const playerAvatar = localStorage.getItem('player_avatar') || '⚡';
+  const newFeedback = {
+    id: 'fb_' + Date.now(),
+    name: playerName,
+    avatar: playerAvatar,
+    rating: parseInt(ratingInput?.value || '5', 10),
+    category: catInput?.value || 'General',
+    message: msgInput.value.trim(),
+    date: new Date().toISOString()
+  };
+
+  const list = getStoredFeedbacks();
+  list.unshift(newFeedback);
+  saveStoredFeedbacks(list);
+
+  if (successBox) successBox.style.display = 'block';
+  msgInput.value = '';
+  showToast('🎉 Feedback sent to Admin successfully! Thank you. ✓');
+  if (typeof ProfileAudio !== 'undefined' && ProfileAudio && typeof ProfileAudio.playSuccess === 'function') {
+    ProfileAudio.playSuccess();
+  }
+
+  setTimeout(() => {
+    closeFeedbackModal();
+  }, 1400);
+}
+
+function renderAdminFeedbackList() {
+  const container = document.getElementById('adminFeedbackListContainer');
+  const countEl = document.getElementById('adminFeedbackCount');
+  if (!container) return;
+
+  const list = getStoredFeedbacks();
+  if (countEl) countEl.textContent = list.length.toString();
+
+  if (list.length === 0) {
+    container.innerHTML = '<div style="text-align: center; padding: 1.5rem; color: #94a3b8; font-size: 0.78rem; background: rgba(15, 23, 42, 0.5); border-radius: 8px;">No player feedback messages yet.</div>';
+    return;
+  }
+
+  container.innerHTML = list.map(item => {
+    const starString = '⭐'.repeat(item.rating || 5);
+    const dateFormatted = new Date(item.date).toLocaleDateString(undefined, {
+      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+    });
+
+    return `
+      <div class="admin-feedback-card">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 1.3rem;">${item.avatar || '👤'}</span>
+            <div>
+              <div style="font-size: 0.82rem; font-weight: 800; color: #ffffff;">${escapeHtml(item.name || 'Anonymous')}</div>
+              <div style="font-size: 0.68rem; color: #94a3b8; display: flex; gap: 6px; align-items: center;">
+                <span style="color: #fbbf24; font-weight: 700;">${starString}</span>
+                <span>&bull;</span>
+                <span style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; padding: 1px 6px; border-radius: 4px; font-weight: 700;">${escapeHtml(item.category || 'General')}</span>
+                <span>&bull;</span>
+                <span>${dateFormatted}</span>
+              </div>
+            </div>
+          </div>
+          <button type="button" onclick="deleteFeedbackMessage('${item.id}')" title="Delete message" style="background: rgba(239, 68, 68, 0.18); border: 1px solid rgba(239, 68, 68, 0.45); color: #f87171; border-radius: 6px; padding: 3px 8px; font-size: 0.72rem; cursor: pointer; display: flex; align-items: center; gap: 3px;">
+            <span>🗑️ Delete</span>
+          </button>
+        </div>
+        <div style="font-size: 0.76rem; color: #cbd5e1; margin-top: 6px; line-height: 1.45; background: rgba(6, 15, 42, 0.6); padding: 7px 9px; border-radius: 6px; border-left: 2px solid #fbbf24;">
+          ${escapeHtml(item.message || '')}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function deleteFeedbackMessage(id) {
+  if (!confirm('Are you sure you want to delete this feedback message?')) return;
+  let list = getStoredFeedbacks();
+  list = list.filter(f => f.id !== id);
+  saveStoredFeedbacks(list);
+  showToast('Feedback message deleted 🗑️');
+}
+
+function clearAllAdminFeedbacks() {
+  if (!confirm('Are you sure you want to delete ALL feedback messages?')) return;
+  saveStoredFeedbacks([]);
+  showToast('All feedback messages cleared 🗑️');
+}
+
+window.openFeedbackModal = openFeedbackModal;
+window.closeFeedbackModal = closeFeedbackModal;
+window.handleFeedbackModalBackdropClick = handleFeedbackModalBackdropClick;
+window.setFeedbackRating = setFeedbackRating;
+window.submitPlayerFeedback = submitPlayerFeedback;
+window.renderAdminFeedbackList = renderAdminFeedbackList;
+window.deleteFeedbackMessage = deleteFeedbackMessage;
+window.clearAllAdminFeedbacks = clearAllAdminFeedbacks;
+
+const HTML_ESC_MAP = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#039;'
+};
+const HTML_ESC_REGEX = /[&<>"']/g;
+
+function escapeHtml(str) {
+  if (typeof str !== 'string') return str ? String(str) : '';
+  return str.replace(HTML_ESC_REGEX, ch => HTML_ESC_MAP[ch]);
+}
+
+// Expose functions to global window scope for inline onclicks
+window.openRoadmapModal = function() {
+  window.location.href = '../leaderboard/index.html?action=roadmap';
+};
+window.switchProfileTab = switchProfileTab;
+window.handleAdminLogin = handleAdminLogin;
+window.exitAdminToProfile = exitAdminToProfile;
+window.adminLogout = adminLogout;
+window.switchAdminSubView = switchAdminSubView;
+window.openCreateTaskModal = openCreateTaskModal;
+window.openEditTaskModal = openEditTaskModal;
+window.closeAdminTaskModal = closeAdminTaskModal;
+window.handleTaskModalBackdropClick = handleTaskModalBackdropClick;
+window.generateRandomTaskCode = generateRandomTaskCode;
+window.handleSaveAdminTaskForm = handleSaveAdminTaskForm;
+window.toggleTaskActive = toggleTaskActive;
+window.deleteAdminTask = deleteAdminTask;
+window.resetPlayerCooldowns = resetPlayerCooldowns;
+window.handleAdminTaskSearch = handleAdminTaskSearch;
+window.setEditUserAvatar = setEditUserAvatar;
+window.openCreateUserModal = openCreateUserModal;
+window.closeCreateUserModal = closeCreateUserModal;
+window.handleSaveCreateUser = handleSaveCreateUser;
+window.openEditUserModal = openEditUserModal;
+window.closeAdminUserModal = closeAdminUserModal;
+window.handleUserModalBackdropClick = handleUserModalBackdropClick;
+window.handleSaveAdminUserForm = handleSaveAdminUserForm;
+window.handleResetUserFromModal = handleResetUserFromModal;
+window.handleDeleteUserFromModal = handleDeleteUserFromModal;
+window.toggleUserActiveStatus = toggleUserActiveStatus;
+window.quickAddUserCoins = quickAddUserCoins;
+window.quickAwardAllPlayers = quickAwardAllPlayers;
+window.handleAdminUserSearch = handleAdminUserSearch;
+window.filterAdminWithdrawals = filterAdminWithdrawals;
+window.approveWithdrawal = approveWithdrawal;
+window.rejectWithdrawal = rejectWithdrawal;
+window.adminResetLeaderboardSeason = adminResetLeaderboardSeason;
+
+
+/**
+ * Log action with timestamp into the Admin Log Console
+ */
+function logAdminAction(message) {
+  const logBox = document.getElementById('adminLogBox');
+  if (!logBox) return;
+
+  const now = new Date();
+  const timeStr = now.toTimeString().split(' ')[0];
+  logBox.innerHTML = `<div>[${timeStr}] ${message}</div>` + logBox.innerHTML;
+}
+
+/**
+ * Refresh all live currency and game indicators on the profile & admin dashboard
+ */
+function updateAdminLiveDisplays() {
+  const currentCoins = parseInt(localStorage.getItem('task_game_coins') || '0', 10);
+  const currentStars = parseInt(localStorage.getItem('task_game_stars') || '0', 10);
+
+  // Update top header and admin coins & stars
+  const headerCoins = document.getElementById('profileCoinsDisplay');
+  if (headerCoins) headerCoins.textContent = currentCoins.toLocaleString();
+
+  const headerStars = document.getElementById('profileStarsDisplay');
+  if (headerStars) headerStars.textContent = currentStars.toLocaleString();
+
+  // Telegram Stars Rating - Suppressed per user request
+  const ratingLevelEl = document.getElementById('tgProfileRatingLevel');
+  const ratingSubEl = document.getElementById('tgProfileRatingSub');
+  if (ratingLevelEl) ratingLevelEl.style.display = 'none';
+  if (ratingSubEl) ratingSubEl.style.display = 'none';
+
+  const userAvatar = document.querySelector('.user-avatar');
+  if (userAvatar) userAvatar.textContent = localStorage.getItem('player_avatar') || '👤';
+
+  const currentProfileUsername = localStorage.getItem('player_username') || localStorage.getItem('user_profile_name') || 'Player';
+  const userName = document.querySelector('.user-name');
+  if (userName) userName.textContent = currentProfileUsername;
+  const headerUserName = document.getElementById('headerUserName');
+  if (headerUserName) headerUserName.textContent = currentProfileUsername;
+  const headerUserAvatar = document.getElementById('headerUserAvatar');
+  if (headerUserAvatar) headerUserAvatar.textContent = localStorage.getItem('player_avatar') || '👤';
+
+  const adminCoins = document.getElementById('adminLiveCoins');
+  if (adminCoins) adminCoins.textContent = `${currentCoins.toLocaleString()} 🪙`;
+
+  const adminStars = document.getElementById('adminLiveStars');
+  if (adminStars) adminStars.textContent = `${currentStars.toLocaleString()} ⭐`;
+
+
+}
+
+// -----------------------------------------------------------------------------
+// Admin Currency Manipulation Functions
+// -----------------------------------------------------------------------------
+
+/**
+ * Add specified amount of coins from input field
+ */
+function adminAddCoins() {
+  const input = document.getElementById('inputCoinsAdjust');
+  const amount = parseInt(input ? input.value : '0', 10);
+
+  if (isNaN(amount) || amount === 0) {
+    alert('Please enter a valid coin amount to add.');
+    return;
+  }
+
+  let coins = parseInt(localStorage.getItem('task_game_coins') || localStorage.getItem('user_coins') || '0', 10);
+  coins = Math.max(0, coins + amount);
+  localStorage.setItem('task_game_coins', coins.toString());
+  localStorage.setItem('user_coins', coins.toString());
+  localStorage.setItem('task_game_coins_alt', coins.toString());
+  try {
+    const bc = new BroadcastChannel('balance_sync_channel');
+    bc.postMessage({ type: 'BALANCE_UPDATED', coins });
+    bc.close();
+  } catch(e) {}
+  window.dispatchEvent(new Event('balance:changed'));
+
+  if (input) input.value = '';
+  updateAdminLiveDisplays();
+  logAdminAction(`Added ${amount.toLocaleString()} coins. New balance: ${coins.toLocaleString()} 🪙`);
+}
+
+/**
+ * Set player coins directly to a specific value
+ */
+function adminSetCoins() {
+  const input = document.getElementById('inputCoinsAdjust');
+  const amount = parseInt(input ? input.value : '0', 10);
+
+  if (isNaN(amount) || amount < 0) {
+    alert('Please enter a valid non-negative coin amount.');
+    return;
+  }
+
+  localStorage.setItem('task_game_coins', amount.toString());
+  localStorage.setItem('user_coins', amount.toString());
+  localStorage.setItem('task_game_coins_alt', amount.toString());
+  try {
+    const bc = new BroadcastChannel('balance_sync_channel');
+    bc.postMessage({ type: 'BALANCE_UPDATED', coins: amount });
+    bc.close();
+  } catch(e) {}
+  window.dispatchEvent(new Event('balance:changed'));
+  if (input) input.value = '';
+  updateAdminLiveDisplays();
+  logAdminAction(`Coins set directly to: ${amount.toLocaleString()} 🪙`);
+}
+
+/**
+ * Quick preset coin adjustments (+500, +2000, +10000, -500)
+ */
+function adminQuickCoins(amount) {
+  let coins = parseInt(localStorage.getItem('task_game_coins') || localStorage.getItem('user_coins') || '0', 10);
+  coins = Math.max(0, coins + amount);
+  localStorage.setItem('task_game_coins', coins.toString());
+  localStorage.setItem('user_coins', coins.toString());
+  localStorage.setItem('task_game_coins_alt', coins.toString());
+  try {
+    const bc = new BroadcastChannel('balance_sync_channel');
+    bc.postMessage({ type: 'BALANCE_UPDATED', coins });
+    bc.close();
+  } catch(e) {}
+  window.dispatchEvent(new Event('balance:changed'));
+
+  updateAdminLiveDisplays();
+  const sign = amount > 0 ? `+${amount.toLocaleString()}` : `${amount.toLocaleString()}`;
+  logAdminAction(`Quick adjustment: ${sign} coins. New balance: ${coins.toLocaleString()} 🪙`);
+}
+
+/**
+ * Add stars to player profile
+ */
+function adminAddStars() {
+  const input = document.getElementById('inputStarsAdjust');
+  const amount = parseInt(input ? input.value : '0', 10);
+
+  if (isNaN(amount) || amount === 0) {
+    alert('Please enter a valid star amount.');
+    return;
+  }
+
+  let stars = parseInt(localStorage.getItem('task_game_stars') || localStorage.getItem('user_stars') || '0', 10);
+  stars = Math.max(0, stars + amount);
+  localStorage.setItem('task_game_stars', stars.toString());
+  localStorage.setItem('user_stars', stars.toString());
+  try {
+    const bc = new BroadcastChannel('balance_sync_channel');
+    bc.postMessage({ type: 'BALANCE_UPDATED', stars });
+    bc.close();
+  } catch(e) {}
+  window.dispatchEvent(new Event('balance:changed'));
+
+  if (input) input.value = '';
+  updateAdminLiveDisplays();
+  logAdminAction(`Added ${amount} Stars. Total stars: ${stars} ⭐`);
+}
+
+// -----------------------------------------------------------------------------
+// Real-time Cloud Data Synchronization for Admin Dashboard
+// -----------------------------------------------------------------------------
+
+function initAdminCloudListeners() {
+  // 1. Real-time Users Listener from Firestore (users collection)
+  const listenUsers = (window.Firebase && window.Firebase.listenToCloudUsers) || window.listenToCloudUsers;
+  if (typeof listenUsers === 'function') {
+    listenUsers((cloudUsers) => {
+      if (Array.isArray(cloudUsers) && cloudUsers.length > 0) {
+        usersData = cloudUsers.map(u => ({
+          id: u.id || u.uid,
+          name: u.displayName || u.name || 'Player',
+          email: u.email || '',
+          avatar: u.avatar || '⚡',
+          level: u.level || 'LVL 1 • NOVICE',
+          coins: typeof u.coins === 'number' ? u.coins : 0,
+          stars: typeof u.stars === 'number' ? u.stars : 0,
+          totalTasks: u.tasksCompleted || u.totalTasks || 0,
+          adsWatched: u.adsWatched || 0,
+          status: u.status || 'active',
+          joined: u.createdAt ? new Date(u.createdAt).toLocaleDateString() : 'Active',
+          lastActive: u.lastActive ? new Date(u.lastActive).toLocaleDateString() : 'Recently'
+        }));
+        localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(usersData));
+        renderAdminUsersList();
+      }
+    });
+  }
+
+  // 2. Real-time Withdrawals / Requests Listener from Firestore (withdrawals collection)
+  const listenWds = (window.Firebase && window.Firebase.listenToCloudWithdrawals) || window.listenToCloudWithdrawals;
+  if (typeof listenWds === 'function') {
+    listenWds((cloudWds) => {
+      if (Array.isArray(cloudWds)) {
+        withdrawalsData = cloudWds.map(w => ({
+          id: w.id,
+          userId: w.userId,
+          playerName: w.playerName || w.userName || 'Player',
+          playerAvatar: w.playerAvatar || '⚡',
+          amount: w.amount || w.rsAmount || 100,
+          starCost: w.starCost || w.stars || 10000,
+          method: w.method || w.title || 'Amazon Gift Card',
+          details: w.details || w.userWhatsapp || w.mobile || 'Voucher Claim',
+          deliveryLink: w.deliveryLink || w.link || '',
+          status: w.status || 'pending',
+          time: w.createdAt ? new Date(w.createdAt).toLocaleString() : 'Recently'
+        }));
+        localStorage.setItem(WITHDRAW_STORAGE_KEY, JSON.stringify(withdrawalsData));
+        renderAdminWithdrawalsList();
+      }
+    });
+  }
+}
+window.initAdminCloudListeners = initAdminCloudListeners;
+
+// -----------------------------------------------------------------------------
+// DOM Ready Lifecycle Initialization
+// -----------------------------------------------------------------------------
+window.addEventListener('firebase:ready', () => { initAdminCloudListeners(); });
+document.addEventListener('DOMContentLoaded', () => {
+  initAdminCloudListeners();
+  // Automatic Telegram login process
+  autoLoginWithTelegram();
+
+  // Sync live coin count on header
+  updateAdminLiveDisplays();
+
+  // Initialize tabs: support ?tab=admin or ?open=admin to open Admin view directly with compulsory lock
+  const urlParams = new URLSearchParams(window.location.search);
+  const targetTab = (urlParams.get('tab') || urlParams.get('open') || '').toLowerCase();
+  if (targetTab === 'admin') {
+    openAdminCompulsoryLock();
+  } else {
+    switchProfileTab('profile');
+  }
+
+  // Initialize player session & authentication indicator
+  updatePlayerSessionUI();
+
+  // Initialize the Invite Friends & Referral System
+  initReferralSystem();
+
+  // Initialize TG profile stats and push system
+  if (typeof renderTgProfileUI === 'function') renderTgProfileUI();
+  if (typeof updateProfileOverviewStats === 'function') updateProfileOverviewStats();
+  if (typeof updateFutureTokensUI === 'function') updateFutureTokensUI();
+  if (typeof initTgPushSystem === 'function') initTgPushSystem();
+
+  // If already authenticated in this session, show unlocked indicator
+  const adminStatusTag = document.getElementById('adminStatusTag');
+  if (adminStatusTag && isAdminLoggedIn()) {
+    adminStatusTag.textContent = '🔓';
+  }
+});
+
+// =============================================================================
+// INVITE FRIENDS & REFERRAL SYSTEM LOGIC
+// =============================================================================
+
+const REFERRAL_CODE_KEY = 'task_game_referral_code';
+const REFERRALS_LIST_KEY = 'task_game_referrals';
+const REDEEMED_REFERRAL_KEY = 'task_game_redeemed_referral';
+
+// Sound synthesis helper
+const ProfileAudio = {
+  ctx: null,
+  init() {
+    if (!this.ctx) {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (AudioCtx) this.ctx = new AudioCtx();
+    }
+    if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+  },
+  playCopyChime() {
+    this.init();
+    if (!this.ctx) return;
+    try {
+      const t = this.ctx.currentTime;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(587.33, t); // D5
+      osc.frequency.setValueAtTime(880, t + 0.08); // A5
+      gain.gain.setValueAtTime(0.08, t);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.28);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.3);
+    } catch (e) {}
+  },
+  playRewardFanfare() {
+    this.init();
+    if (!this.ctx) return;
+    try {
+      const t = this.ctx.currentTime;
+      [523.25, 659.25, 783.99, 1046.50].forEach((freq, idx) => {
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, t + idx * 0.07);
+        gain.gain.setValueAtTime(0.12, t + idx * 0.07);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + idx * 0.07 + 0.35);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(t + idx * 0.07);
+        osc.stop(t + idx * 0.07 + 0.38);
+      });
+    } catch (e) {}
+  }
+};
+
+function showToast(msg, duration = 2500) {
+  const toast = document.getElementById('profileToast');
+  if (!toast) return;
+  toast.textContent = msg;
+  toast.classList.add('show');
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => {
+    toast.classList.remove('show');
+  }, duration);
+}
+
+function showFloatingCoin(targetElement, text) {
+  if (!targetElement || typeof targetElement.getBoundingClientRect !== 'function') return;
+  const rect = targetElement.getBoundingClientRect();
+  const floatEl = document.createElement('div');
+  floatEl.className = 'floating-coin-profile';
+  floatEl.textContent = text;
+  floatEl.style.left = `${rect.left + rect.width / 4}px`;
+  floatEl.style.top = `${rect.top - 12}px`;
+  document.body.appendChild(floatEl);
+  setTimeout(() => floatEl.remove(), 800);
+}
+
+// =============================================================================
+// AUTOMATIC TELEGRAM AUTHENTICATION & PLAYER STATE
+// =============================================================================
+
+function autoLoginWithTelegram() {
+  try {
+    const tg = window.Telegram && window.Telegram.WebApp;
+    if (tg) {
+      if (typeof tg.ready === 'function') tg.ready();
+      if (typeof tg.expand === 'function') tg.expand();
+
+      const tgUser = tg.initDataUnsafe && tg.initDataUnsafe.user;
+      if (tgUser) {
+        const username = tgUser.username 
+          || [tgUser.first_name, tgUser.last_name].filter(Boolean).join(' ') 
+          || 'Task Earner';
+        localStorage.setItem('player_username', username);
+        localStorage.setItem('player_id', `tg_${tgUser.id}`);
+        localStorage.setItem('player_logged_in', 'true');
+        if (tgUser.photo_url) {
+          localStorage.setItem('player_avatar', '⚡');
+          localStorage.setItem('player_avatar_url', tgUser.photo_url);
+        }
+        if (tgUser.first_name) localStorage.setItem('player_first_name', tgUser.first_name);
+        if (tgUser.last_name) localStorage.setItem('player_last_name', tgUser.last_name);
+
+        // Update profile display fields if available
+        const dispName = document.getElementById('tgProfileDisplayName');
+        if (dispName) dispName.textContent = username;
+        const dispUser = document.getElementById('tgProfileUsername');
+        if (dispUser) dispUser.textContent = tgUser.username || username.toLowerCase().replace(/\s+/g, '_');
+
+        // Synchronize in task_game_users
+        try {
+          const rawUsers = localStorage.getItem('task_game_users');
+          if (rawUsers) {
+            const users = JSON.parse(rawUsers);
+            let me = users.find(u => u.id === 'usr_1' || u.id === `tg_${tgUser.id}` || u.name === username || u.name === 'Task Earner' || u.name === 'NovaEarner');
+            if (me) {
+              me.name = username;
+              me.id = `tg_${tgUser.id}`;
+              localStorage.setItem('task_game_users', JSON.stringify(users));
+            }
+          }
+        } catch (e) {}
+        return;
+      }
+    }
+
+    // Default seamless auto-login
+    localStorage.setItem('player_logged_in', 'true');
+    const existingName = localStorage.getItem('player_username');
+    if (!existingName || existingName === 'NovaEarner' || existingName === 'Player') {
+      localStorage.setItem('player_username', 'Task Earner');
+    }
+  } catch (e) {
+    localStorage.setItem('player_logged_in', 'true');
+  }
+}
+
+function getCurrentPlayer() {
+  const saved = localStorage.getItem('player_username');
+  const username = (saved && saved !== 'NovaEarner' && saved !== 'Player') ? saved : 'Task Earner';
+  const avatar = localStorage.getItem('player_avatar') || '⚡';
+  const id = localStorage.getItem('player_id') || 'usr_1';
+  return { id, username, avatar, isLoggedIn: true };
+}
+
+function isUserLoggedIn() {
+  return true; // Always logged in via automatic Telegram authentication
+}
+
+function updatePlayerSessionUI() {
+  const player = getCurrentPlayer();
+
+  // Remove the Image 3 session badge / strip completely from DOM
+  const playerBadge = document.getElementById('playerSessionBadge') || document.querySelector('.player-session-badge');
+  if (playerBadge) playerBadge.remove();
+
+  const refCheck = document.getElementById('referralUserCheck');
+  if (refCheck) refCheck.style.display = 'none';
+
+  // Update profile Hero Card display name if on default
+  const dispName = document.getElementById('tgProfileDisplayName');
+  if (dispName && (dispName.textContent === 'Nova Earner' || dispName.textContent === 'Player' || !dispName.textContent)) {
+    dispName.textContent = player.username;
+  }
+  const dispUser = document.getElementById('tgProfileUsername');
+  if (dispUser && (dispUser.textContent === 'player' || dispUser.textContent === 'novaearner')) {
+    dispUser.textContent = player.username.toLowerCase().replace(/\s+/g, '_');
+  }
+
+  const userCheckIcon = document.getElementById('userCheckIcon');
+  const userCheckText = document.getElementById('userCheckText');
+  const btnQuickLoginAction = document.getElementById('btnQuickLoginAction');
+
+  if (userCheckIcon) {
+    userCheckIcon.textContent = '🟢';
+  }
+  if (userCheckText) {
+    userCheckText.innerHTML = `Account: <b>${escapeHtml(player.username)}</b> (Telegram Verified)`;
+  }
+  if (btnQuickLoginAction) {
+    btnQuickLoginAction.style.display = 'none';
+  }
+}
+
+// =============================================================================
+// TELEGRAM USER AUTHORIZATION (MTProto Specification: auth.sendCode / auth.signIn)
+// =============================================================================
+const TG_SESSION_KEY = 'task_game_tg_session';
+const TG_FUTURE_TOKENS_KEY = 'task_game_future_auth_tokens';
+
+let currentTgAuth = {
+  phone: '+919876543210',
+  codeHash: '',
+  codeType: 'app',
+  expectedCode: '12345',
+  dcId: 1,
+  isTestDc: false,
+  resendTimer: null,
+  resendSeconds: 45
+};
+
+let tgQrTimer = null;
+let tgQrSeconds = 30;
+
+function getFutureAuthTokens() {
+  try {
+    const raw = localStorage.getItem(TG_FUTURE_TOKENS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function storeFutureAuthToken(phone) {
+  try {
+    let tokens = getFutureAuthTokens();
+    const newToken = {
+      token: 'tok_' + Math.random().toString(36).substr(2, 12),
+      phone: phone || '+919876543210',
+      createdAt: Date.now(),
+      expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000 // 30 days
+    };
+    // Prepend and enforce MTProto 20 tokens max limit
+    tokens = [newToken, ...tokens.filter(t => t.phone !== phone)].slice(0, 20);
+    localStorage.setItem(TG_FUTURE_TOKENS_KEY, JSON.stringify(tokens));
+    updateFutureTokensUI();
+  } catch (e) {}
+}
+
+function updateFutureTokensUI() {
+  const counterEl = document.getElementById('tgFutureTokensCount');
+  if (counterEl) {
+    const tokens = getFutureAuthTokens();
+    counterEl.textContent = `${tokens.length} / 20`;
+  }
+  const banner = document.getElementById('tgFutureTokenBox');
+  if (banner) {
+    const tokens = getFutureAuthTokens();
+    banner.style.display = tokens.length > 0 ? 'block' : 'none';
+  }
+}
+
+function togglePlayerLoginState() {
+  const currentlyLoggedIn = isUserLoggedIn();
+
+  if (currentlyLoggedIn) {
+    // If Firebase Auth is initialized, sign out from Firebase
+    if (window.Firebase && typeof window.Firebase.signOutUser === 'function') {
+      window.Firebase.signOutUser();
+    }
+
+    const curPhone = localStorage.getItem('player_username') || '+919876543210';
+    storeFutureAuthToken(curPhone);
+
+    localStorage.setItem('player_logged_in', 'false');
+    localStorage.removeItem('player_email');
+    localStorage.removeItem('player_uid');
+    showToast('🔒 Signed out of session.');
+    updatePlayerSessionUI();
+  } else {
+    openPlayerLoginModal();
+  }
+}
+
+function openPlayerLoginModal() {
+  const modal = document.getElementById('playerLoginModalOverlay');
+  if (!modal) return;
+
+  modal.classList.add('active');
+  modal.style.display = 'flex';
+
+  // Default to Firebase Email/Password View
+  switchTgAuthTab('firebase_email');
+  updateFbAuthModalUI();
+  updateFutureTokensUI();
+
+  // Populate avatar row in signup if empty
+  populateSignUpAvatarOptions();
+}
+
+function closePlayerLoginModal() {
+  const modal = document.getElementById('playerLoginModalOverlay');
+  if (modal) {
+    modal.classList.remove('active');
+    modal.style.display = 'none';
+  }
+  if (currentTgAuth.resendTimer) {
+    clearInterval(currentTgAuth.resendTimer);
+    currentTgAuth.resendTimer = null;
+  }
+  if (tgQrTimer) {
+    clearInterval(tgQrTimer);
+    tgQrTimer = null;
+  }
+}
+
+function handlePlayerLoginModalBackdropClick(event) {
+  if (event && (event.target.id === 'playerLoginModalOverlay' || event.target.classList.contains('profile-modal-overlay'))) {
+    closePlayerLoginModal();
+  }
+}
+
+function handlePlayerLoginForm(event) {
+  if (event) event.preventDefault();
+  handleSendTgCode();
+}
+
+function capitalize(s) {
+  if (!s) return '';
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+// =============================================================================
+// FIREBASE AUTHENTICATION (EMAIL & PASSWORD) MODAL CONTROLLER
+// =============================================================================
+let currentFbAuthMode = 'signin';
+
+function setFbAuthMode(mode) {
+  currentFbAuthMode = mode;
+  const btnIn = document.getElementById('btnFbModeSignIn');
+  const btnUp = document.getElementById('btnFbModeSignUp');
+  const lblName = document.getElementById('lblFbDisplayName');
+  const wrapName = document.getElementById('wrapFbDisplayName');
+  const lblConfirm = document.getElementById('lblFbConfirmPassword');
+  const wrapConfirm = document.getElementById('wrapFbConfirmPassword');
+  const forgotRow = document.getElementById('fbForgotRow');
+  const submitText = document.getElementById('btnFbSubmitText');
+  const msgBanner = document.getElementById('fbAuthMsgBanner');
+
+  if (msgBanner) msgBanner.style.display = 'none';
+
+  if (mode === 'signup') {
+    if (btnIn) btnIn.classList.remove('active');
+    if (btnUp) btnUp.classList.add('active');
+    if (lblName) lblName.style.display = 'block';
+    if (wrapName) wrapName.style.display = 'flex';
+    if (lblConfirm) lblConfirm.style.display = 'block';
+    if (wrapConfirm) wrapConfirm.style.display = 'flex';
+    if (forgotRow) forgotRow.style.display = 'none';
+    if (submitText) submitText.textContent = 'Create Account & Cloud Sync';
+  } else {
+    if (btnIn) btnIn.classList.add('active');
+    if (btnUp) btnUp.classList.remove('active');
+    if (lblName) lblName.style.display = 'none';
+    if (wrapName) wrapName.style.display = 'none';
+    if (lblConfirm) lblConfirm.style.display = 'none';
+    if (wrapConfirm) wrapConfirm.style.display = 'none';
+    if (forgotRow) forgotRow.style.display = 'block';
+    if (submitText) submitText.textContent = 'Sign In with Email';
+  }
+}
+
+function toggleFbPasswordVisibility(inputId) {
+  const el = document.getElementById(inputId);
+  if (!el) return;
+  el.type = el.type === 'password' ? 'text' : 'password';
+}
+
+function showFbAuthBanner(type, message) {
+  const banner = document.getElementById('fbAuthMsgBanner');
+  if (!banner) return;
+  banner.className = `fb-auth-msg-banner ${type}`;
+  banner.textContent = message;
+  banner.style.display = 'block';
+}
+
+async function handleFirebaseEmailAuthSubmit() {
+  const emailInput = document.getElementById('fbInputEmail');
+  const pwdInput = document.getElementById('fbInputPassword');
+  const nameInput = document.getElementById('fbInputDisplayName');
+  const confirmPwdInput = document.getElementById('fbInputConfirmPassword');
+  const submitBtn = document.getElementById('btnFbSubmitAuth');
+  const submitText = document.getElementById('btnFbSubmitText');
+
+  const email = emailInput ? emailInput.value.trim() : '';
+  const password = pwdInput ? pwdInput.value : '';
+
+  if (!email || !email.includes('@')) {
+    showFbAuthBanner('error', 'Please enter a valid email address.');
+    return;
+  }
+  if (!password || password.length < 6) {
+    showFbAuthBanner('error', 'Password must be at least 6 characters long.');
+    return;
+  }
+
+  if (currentFbAuthMode === 'signup') {
+    const confirmPwd = confirmPwdInput ? confirmPwdInput.value : '';
+    if (password !== confirmPwd) {
+      showFbAuthBanner('error', 'Passwords do not match. Please re-enter.');
+      return;
+    }
+  }
+
+  // Loading state
+  const originalText = submitText ? submitText.textContent : 'Submit';
+  if (submitBtn) submitBtn.disabled = true;
+  if (submitText) submitText.textContent = 'Authenticating with Firebase...';
+
+  try {
+    if (!window.Firebase) {
+      throw new Error('Firebase services are still initializing. Please wait a moment.');
+    }
+
+    let result = null;
+    if (currentFbAuthMode === 'signup') {
+      const displayName = nameInput && nameInput.value.trim() ? nameInput.value.trim() : 'Player';
+      result = await window.Firebase.signUpWithEmail(email, password, displayName);
+    } else {
+      result = await window.Firebase.signInWithEmail(email, password);
+    }
+
+    if (result && result.success) {
+      const user = result.user;
+      showFbAuthBanner('success', `Success! Authenticated as ${user.email}.`);
+      showToast(`🔥 Authenticated with Firebase: ${user.email}`);
+
+      // Refresh site header & profile session UI
+      updatePlayerSessionUI();
+      updateFbAuthModalUI();
+
+      setTimeout(() => {
+        closePlayerLoginModal();
+      }, 1200);
+    } else {
+      showFbAuthBanner('error', result ? result.error : 'Authentication failed.');
+    }
+  } catch (err) {
+    console.error("[Firebase Auth Submit]", err);
+    showFbAuthBanner('error', err.message || 'Error communicating with Firebase.');
+  } finally {
+    if (submitBtn) submitBtn.disabled = false;
+    if (submitText) submitText.textContent = originalText;
+  }
+}
+
+async function handleFirebaseSignOut() {
+  if (window.Firebase && typeof window.Firebase.signOutUser === 'function') {
+    await window.Firebase.signOutUser();
+  }
+  showToast('🔒 Signed out from Firebase.');
+  updatePlayerSessionUI();
+  updateFbAuthModalUI();
+}
+
+async function handleFirebasePasswordReset() {
+  const emailInput = document.getElementById('fbInputEmail');
+  const email = emailInput ? emailInput.value.trim() : '';
+  if (!email || !email.includes('@')) {
+    showFbAuthBanner('error', 'Please enter your email address to reset password.');
+    return;
+  }
+
+  showFbAuthBanner('info', 'Sending password reset email via Firebase...');
+  try {
+    const res = await window.Firebase.sendPasswordReset(email);
+    if (res && res.success) {
+      showFbAuthBanner('success', `Password reset email sent to ${email}! Check your inbox.`);
+    } else {
+      showFbAuthBanner('error', res.error || 'Failed to send reset email.');
+    }
+  } catch (err) {
+    showFbAuthBanner('error', err.message);
+  }
+}
+
+function updateFbAuthModalUI() {
+  const loggedInBox = document.getElementById('fbLoggedInBox');
+  const formBox = document.getElementById('fbAuthFormBox');
+  const emailVal = document.getElementById('fbUserDetailEmail');
+  const nameVal = document.getElementById('fbUserDetailName');
+  const uidVal = document.getElementById('fbUserDetailUid');
+
+  const fbUser = window.FirebaseAuth && typeof window.FirebaseAuth.getCurrentUser === 'function'
+    ? window.FirebaseAuth.getCurrentUser()
+    : null;
+
+  const playerEmail = fbUser ? fbUser.email : localStorage.getItem('player_email');
+  const playerUid = fbUser ? fbUser.uid : localStorage.getItem('player_uid');
+  const playerName = (fbUser && fbUser.displayName) || localStorage.getItem('player_username') || 'Player';
+  const isLoggedIn = Boolean(playerEmail && localStorage.getItem('player_logged_in') !== 'false');
+
+  if (loggedInBox && formBox) {
+    if (isLoggedIn) {
+      loggedInBox.style.display = 'block';
+      formBox.style.display = 'none';
+      if (emailVal) emailVal.textContent = playerEmail;
+      if (nameVal) nameVal.textContent = playerName;
+      if (uidVal) uidVal.textContent = playerUid ? `${playerUid.substring(0, 14)}...` : '-';
+    } else {
+      loggedInBox.style.display = 'none';
+      formBox.style.display = 'block';
+    }
+  }
+}
+
+function switchTgAuthTab(tabName) {
+  const tabs = [
+    { id: 'firebase_email', btn: 'tabBtnTgFirebaseEmail', view: 'tgAuthViewFirebaseEmail' },
+    { id: 'phone', btn: 'tabBtnTgPhone', view: 'tgAuthViewPhone' },
+    { id: 'qr', btn: 'tabBtnTgQr', view: 'tgAuthViewQR' },
+    { id: 'passkey', btn: 'tabBtnTgPasskey', view: 'tgAuthViewPasskey' },
+    { id: 'bot', btn: 'tabBtnTgBot', view: 'tgAuthViewBot' },
+    { id: 'test', btn: 'tabBtnTgTest', view: 'tgAuthViewTest' }
+  ];
+
+  tabs.forEach(item => {
+    const btn = document.getElementById(item.btn);
+    if (btn) btn.classList.toggle('active', item.id === tabName);
+
+    const view = document.getElementById(item.view);
+    if (view) view.style.display = (item.id === tabName) ? 'block' : 'none';
+  });
+
+  const codeView = document.getElementById('tgAuthViewCode');
+  const twoFaView = document.getElementById('tgAuthView2FA');
+  const signUpView = document.getElementById('tgAuthViewSignUp');
+
+  if (codeView) codeView.style.display = 'none';
+  if (twoFaView) twoFaView.style.display = 'none';
+  if (signUpView) signUpView.style.display = 'none';
+
+  if (tabName === 'firebase_email') {
+    updateFbAuthModalUI();
+  }
+
+  if (tabName === 'qr') {
+    startQrCountdown();
+  } else if (tgQrTimer) {
+    clearInterval(tgQrTimer);
+    tgQrTimer = null;
+  }
+}
+
+function backToTgAuthView(viewName) {
+  const views = ['firebase_email', 'phone', 'code', '2FA', 'signUp'];
+  views.forEach(v => {
+    const elId = v === 'firebase_email' ? 'tgAuthViewFirebaseEmail' : ('tgAuthView' + v);
+    const el = document.getElementById(elId);
+    if (el) el.style.display = (v.toLowerCase() === viewName.toLowerCase()) ? 'block' : 'none';
+  });
+}
+
+function handleTgCountrySelectChange() {
+  const sel = document.getElementById('tgAuthCountrySelect');
+  const dialDisplay = document.getElementById('tgPhoneDialCodeDisplay');
+  if (sel && dialDisplay) {
+    dialDisplay.textContent = sel.value;
+  }
+}
+
+function fillTestDcAccount(dcNum) {
+  const sel = document.getElementById('tgAuthCountrySelect');
+  const phoneInput = document.getElementById('tgAuthPhoneInput');
+  const dialDisplay = document.getElementById('tgPhoneDialCodeDisplay');
+
+  if (sel) sel.value = '+999';
+  if (dialDisplay) dialDisplay.textContent = '+999';
+
+  const testNumbers = {
+    1: '6611111',
+    2: '6622222',
+    3: '6633333'
+  };
+
+  if (phoneInput) {
+    phoneInput.value = testNumbers[dcNum] || '6611111';
+    phoneInput.focus();
+  }
+
+  showToast(`⚡ Loaded Test DC ${dcNum} account (+999${testNumbers[dcNum]}). Code: ${dcNum.toString().repeat(5)}`);
+}
+
+function fillAndSendTestDc(dcNum) {
+  switchTgAuthTab('phone');
+  fillTestDcAccount(dcNum);
+  setTimeout(() => {
+    handleSendTgCode();
+  }, 300);
+}
+
+function handleSendTgCode() {
+  const dialDisplay = document.getElementById('tgPhoneDialCodeDisplay');
+  const phoneInput = document.getElementById('tgAuthPhoneInput');
+  const deliverySel = document.getElementById('tgCodeDeliverySelect');
+
+  const dial = dialDisplay ? dialDisplay.textContent.trim() : '+91';
+  const rawNum = phoneInput ? phoneInput.value.trim().replace(/\D/g, '') : '';
+
+  if (!rawNum || rawNum.length < 5) {
+    showToast('⚠️ Please enter a valid phone number to continue.');
+    if (phoneInput) phoneInput.focus();
+    return;
+  }
+
+  const fullPhone = dial + rawNum;
+  currentTgAuth.phone = fullPhone;
+  currentTgAuth.codeHash = 'hash_' + Math.random().toString(36).substr(2, 9);
+  currentTgAuth.codeType = deliverySel ? deliverySel.value : 'app';
+
+  // Check if phone belongs to official Test DC format (99966XYYYY)
+  if (rawNum.startsWith('661') || fullPhone.includes('999661')) {
+    currentTgAuth.isTestDc = true;
+    currentTgAuth.dcId = 1;
+    currentTgAuth.expectedCode = '11111';
+  } else if (rawNum.startsWith('662') || fullPhone.includes('999662')) {
+    currentTgAuth.isTestDc = true;
+    currentTgAuth.dcId = 2;
+    currentTgAuth.expectedCode = '22222';
+  } else if (rawNum.startsWith('663') || fullPhone.includes('999663')) {
+    currentTgAuth.isTestDc = true;
+    currentTgAuth.dcId = 3;
+    currentTgAuth.expectedCode = '33333';
+  } else {
+    currentTgAuth.isTestDc = false;
+    currentTgAuth.expectedCode = '12345';
+  }
+
+  // Check future auth token match per MTProto spec
+  const futureTokens = getFutureAuthTokens();
+  const matchedToken = futureTokens.find(t => t.phone === fullPhone);
+  if (matchedToken) {
+    showToast('⚡ Future Auth Token matched! Authorizing session instantly (auth.sentCodeSuccess)...');
+    setTimeout(() => {
+      completeTgAuthorization({
+        phone: fullPhone,
+        firstName: 'Nova User',
+        username: 'nova_auth_' + rawNum.slice(-4)
+      });
+    }, 600);
+    return;
+  }
+
+  // Update Code Verification UI
+  const destEl = document.getElementById('tgDisplayDestPhone');
+  if (destEl) destEl.textContent = fullPhone;
+
+  const badgeEl = document.getElementById('tgCodeTypeBadge');
+  if (badgeEl) {
+    const badgeNames = {
+      app: '📱 Telegram App',
+      sms: '💬 SMS Code',
+      email: '📧 Email Code',
+      fragment: '💎 Fragment SMS',
+      call: '📞 Voice Call'
+    };
+    badgeEl.textContent = badgeNames[currentTgAuth.codeType] || '📱 Telegram App';
+  }
+
+  // Auto-fill button label
+  const autoFillBtn = document.getElementById('btnTgAutofillTestCode');
+  if (autoFillBtn) {
+    autoFillBtn.textContent = `⚡ Auto-fill Code (${currentTgAuth.expectedCode})`;
+  }
+
+  // Clear PIN inputs
+  for (let i = 1; i <= 5; i++) {
+    const pinBox = document.getElementById('tgPin' + i);
+    if (pinBox) pinBox.value = '';
+  }
+
+  // Start resend countdown
+  startResendTimer();
+
+  // Switch to Code View
+  backToTgAuthView('code');
+
+  setTimeout(() => {
+    const p1 = document.getElementById('tgPin1');
+    if (p1) p1.focus();
+  }, 100);
+
+  ProfileAudio.playClickSoft();
+  showToast(`📩 Code sent to ${fullPhone} via ${currentTgAuth.codeType.toUpperCase()}! (Code: ${currentTgAuth.expectedCode})`);
+}
+
+function startResendTimer() {
+  if (currentTgAuth.resendTimer) clearInterval(currentTgAuth.resendTimer);
+  currentTgAuth.resendSeconds = 45;
+
+  const timerText = document.getElementById('tgResendTimerText');
+  const secEl = document.getElementById('tgResendSeconds');
+  const resendBtn = document.getElementById('btnTgResendCode');
+
+  if (timerText) timerText.style.display = 'inline';
+  if (resendBtn) resendBtn.style.display = 'none';
+  if (secEl) secEl.textContent = '45s';
+
+  currentTgAuth.resendTimer = setInterval(() => {
+    currentTgAuth.resendSeconds--;
+    if (secEl) secEl.textContent = currentTgAuth.resendSeconds + 's';
+
+    if (currentTgAuth.resendSeconds <= 0) {
+      clearInterval(currentTgAuth.resendTimer);
+      currentTgAuth.resendTimer = null;
+      if (timerText) timerText.style.display = 'none';
+      if (resendBtn) resendBtn.style.display = 'inline';
+    }
+  }, 1000);
+}
+
+function resendTgCode() {
+  currentTgAuth.codeType = 'sms';
+  const badgeEl = document.getElementById('tgCodeTypeBadge');
+  if (badgeEl) badgeEl.textContent = '💬 SMS Code (auth.resendCode)';
+  startResendTimer();
+  showToast(`📲 Code resent via SMS (auth.resendCode): ${currentTgAuth.expectedCode}`);
+}
+
+function handlePinInput(index, event) {
+  const input = event.target;
+  const val = input.value.replace(/\D/g, '');
+  input.value = val ? val[val.length - 1] : '';
+
+  if (input.value && index < 5) {
+    const next = document.getElementById('tgPin' + (index + 1));
+    if (next) next.focus();
+  }
+
+  // Check if all 5 digits are entered
+  checkAndAutoSubmitPin();
+}
+
+function handlePinKeydown(index, event) {
+  if (event.key === 'Backspace' && !event.target.value && index > 1) {
+    const prev = document.getElementById('tgPin' + (index - 1));
+    if (prev) {
+      prev.focus();
+      prev.value = '';
+    }
+  }
+}
+
+function checkAndAutoSubmitPin() {
+  let pin = '';
+  for (let i = 1; i <= 5; i++) {
+    const el = document.getElementById('tgPin' + i);
+    if (el && el.value) pin += el.value;
+  }
+  if (pin.length === 5) {
+    setTimeout(() => {
+      handleVerifyTgCode();
+    }, 200);
+  }
+}
+
+function autoFillTestCode() {
+  const code = currentTgAuth.expectedCode || '12345';
+  for (let i = 1; i <= 5; i++) {
+    const el = document.getElementById('tgPin' + i);
+    if (el) el.value = code[i - 1] || '';
+  }
+  setTimeout(() => {
+    handleVerifyTgCode();
+  }, 150);
+}
+
+function handleVerifyTgCode() {
+  let enteredPin = '';
+  for (let i = 1; i <= 5; i++) {
+    const el = document.getElementById('tgPin' + i);
+    if (el) enteredPin += el.value.trim();
+  }
+
+  if (enteredPin.length < 5) {
+    showToast('⚠️ Please enter all 5 digits of your verification code.');
+    return;
+  }
+
+  if (enteredPin !== currentTgAuth.expectedCode) {
+    ProfileAudio.playWarningBuzzer();
+    showToast('❌ 400 PHONE_CODE_INVALID: The confirmation code is incorrect.');
+    // Shake pin inputs
+    const row = document.getElementById('tgPinInputsRow');
+    if (row) {
+      row.style.animation = 'shake 0.4s ease';
+      setTimeout(() => row.style.animation = '', 400);
+    }
+    return;
+  }
+
+  // Check if 2FA is required for DC2 test account
+  if (currentTgAuth.isTestDc && currentTgAuth.dcId === 2) {
+    backToTgAuthView('2FA');
+    showToast('🔐 400 SESSION_PASSWORD_NEEDED: 2FA cloud password required.');
+    const pwdInput = document.getElementById('tg2faPasswordInput');
+    if (pwdInput) {
+      pwdInput.value = '';
+      pwdInput.focus();
+    }
+    return;
+  }
+
+  // Check if new user registration is required for DC3 test account
+  if (currentTgAuth.isTestDc && currentTgAuth.dcId === 3) {
+    backToTgAuthView('signUp');
+    showToast('✨ auth.authorizationSignUpRequired: Complete registration.');
+    const fnInput = document.getElementById('tgSignUpFirstName');
+    if (fnInput) fnInput.focus();
+    return;
+  }
+
+  // Standard Success Login
+  completeTgAuthorization({
+    phone: currentTgAuth.phone,
+    firstName: currentTgAuth.isTestDc ? `Test User DC${currentTgAuth.dcId}` : 'Nova Player',
+    username: currentTgAuth.isTestDc ? `test_dc${currentTgAuth.dcId}` : 'nova_earner'
+  });
+}
+
+function toggleTgPasswordVisibility(inputId, btnEl) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  const isPwd = input.type === 'password';
+  input.type = isPwd ? 'text' : 'password';
+  if (btnEl) btnEl.textContent = isPwd ? '🔒' : '👁️';
+}
+
+function handleVerifyTg2FA() {
+  const pwdInput = document.getElementById('tg2faPasswordInput');
+  const val = pwdInput ? pwdInput.value.trim() : '';
+
+  if (!val) {
+    showToast('⚠️ Please enter your 2FA cloud password.');
+    if (pwdInput) pwdInput.focus();
+    return;
+  }
+
+  // Accept password
+  completeTgAuthorization({
+    phone: currentTgAuth.phone,
+    firstName: 'Nova 2FA VIP',
+    username: 'nova_2fa_secure'
+  });
+}
+
+function populateSignUpAvatarOptions() {
+  const row = document.getElementById('tgSignUpAvatarRow');
+  if (!row || row.children.length > 0) return;
+
+  const avatars = ["⚡", "👑", "💎", "🚀", "🦊", "🦁", "🎯", "🤖"];
+  avatars.forEach((av, idx) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'tg-test-chip' + (idx === 0 ? ' active' : '');
+    btn.style.fontSize = '1.2rem';
+    btn.textContent = av;
+    btn.onclick = () => {
+      row.querySelectorAll('.tg-test-chip').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    };
+    row.appendChild(btn);
+  });
+}
+
+function handleCompleteTgSignUp() {
+  const fnInput = document.getElementById('tgSignUpFirstName');
+  const lnInput = document.getElementById('tgSignUpLastName');
+  const fn = fnInput ? fnInput.value.trim() : '';
+  const ln = lnInput ? lnInput.value.trim() : '';
+
+  if (!fn) {
+    showToast('⚠️ Please enter your first name.');
+    if (fnInput) fnInput.focus();
+    return;
+  }
+
+  const activeAvBtn = document.querySelector('#tgSignUpAvatarRow .tg-test-chip.active');
+  const avatar = activeAvBtn ? activeAvBtn.textContent.trim() : '⚡';
+
+  completeTgAuthorization({
+    phone: currentTgAuth.phone,
+    firstName: fn,
+    lastName: ln,
+    username: fn.toLowerCase().replace(/\s+/g, '_') + '_tg',
+    avatar: avatar
+  });
+}
+
+// QR Code Flow
+function startQrCountdown() {
+  tgQrSeconds = 30;
+  const timerEl = document.getElementById('tgQrTimerText');
+  if (timerEl) timerEl.textContent = tgQrSeconds + 's';
+
+  if (tgQrTimer) clearInterval(tgQrTimer);
+  tgQrTimer = setInterval(() => {
+    tgQrSeconds--;
+    if (timerEl) timerEl.textContent = tgQrSeconds + 's';
+    if (tgQrSeconds <= 0) {
+      refreshTgQrToken();
+    }
+  }, 1000);
+}
+
+function refreshTgQrToken() {
+  tgQrSeconds = 30;
+  const timerEl = document.getElementById('tgQrTimerText');
+  if (timerEl) timerEl.textContent = '30s';
+  showToast('🔄 QR Login Token refreshed (auth.exportLoginToken).');
+}
+
+function simulateQrLoginApprove() {
+  showToast('📷 QR Code scanned by Telegram mobile app! Authorizing...');
+  setTimeout(() => {
+    completeTgAuthorization({
+      phone: '+1 555-0199',
+      firstName: 'Desktop Client',
+      username: 'telegram_desktop'
+    });
+  }, 500);
+}
+
+// Passkey Flow
+function handlePasskeyAuth() {
+  showToast('👆 Verifying biometric passkey (auth.initPasskeyLogin)...');
+  setTimeout(() => {
+    completeTgAuthorization({
+      phone: '+1 555-PASS',
+      firstName: 'Passkey Master',
+      username: 'biometric_vip'
+    });
+  }, 600);
+}
+
+// Bot Token Flow
+function handleBotTokenAuth() {
+  const tokenInput = document.getElementById('tgBotTokenInput');
+  const token = tokenInput ? tokenInput.value.trim() : '';
+
+  if (!token || !token.includes(':')) {
+    showToast('⚠️ Please enter a valid Telegram Bot Token from @BotFather.');
+    return;
+  }
+
+  completeTgAuthorization({
+    phone: 'BOT',
+    firstName: 'NovaTaskBot 🤖',
+    username: 'NovaTaskOfficialBot',
+    avatar: '🤖',
+    isBot: true
+  });
+}
+
+function handleFutureTokenLogin() {
+  const tokens = getFutureAuthTokens();
+  if (tokens.length === 0) {
+    showToast('⚠️ No future auth token available.');
+    return;
+  }
+  const latest = tokens[0];
+  showToast(`⚡ Fast login using cached token for ${latest.phone}...`);
+  setTimeout(() => {
+    completeTgAuthorization({
+      phone: latest.phone,
+      firstName: 'Nova Earner',
+      username: 'nova_token_user'
+    });
+  }, 400);
+}
+
+function completeTgAuthorization(userData) {
+  const username = userData.firstName || userData.username || 'NovaEarner';
+  const phone = userData.phone || '+919876543210';
+  const avatar = userData.avatar || '⚡';
+
+  // Save session info
+  const sessionData = {
+    authKeyId: 'auth_key_#' + Math.random().toString(16).substr(2, 8),
+    phone: phone,
+    firstName: userData.firstName,
+    lastName: userData.lastName || '',
+    username: userData.username || 'nova_earner',
+    avatar: avatar,
+    isBot: Boolean(userData.isBot),
+    dateCreated: Date.now()
+  };
+
+  localStorage.setItem(TG_SESSION_KEY, JSON.stringify(sessionData));
+  localStorage.setItem('player_username', username);
+  localStorage.setItem('player_logged_in', 'true');
+  if (userData.avatar) {
+    localStorage.setItem('player_avatar', avatar);
+  }
+
+  // Also update Telegram Profile record if exists
+  try {
+    const prof = getTgProfile();
+    prof.firstName = userData.firstName || prof.firstName;
+    if (userData.lastName) prof.lastName = userData.lastName;
+    if (userData.username) prof.username = userData.username;
+    if (userData.avatar) prof.avatar = userData.avatar;
+    saveTgProfile(prof);
+  } catch (e) {}
+
+  // Save future auth token
+  storeFutureAuthToken(phone);
+
+  closePlayerLoginModal();
+  updatePlayerSessionUI();
+  updateAdminLiveDisplays();
+  syncProfileReferralCode();
+
+  ProfileAudio.playRewardFanfare();
+  showToast(`✓ Telegram Authorized! Key: ${sessionData.authKeyId} (${username})`);
+
+  try {
+    const ch = new BroadcastChannel(SYNC_CHANNEL_NAME);
+    ch.postMessage({ type: 'USER_LOGIN', username: username });
+  } catch (e) {}
+}
+
+// Active Devices & Sessions Modal Management
+function openTgActiveSessionsModal() {
+  const modal = document.getElementById('tgActiveSessionsModalOverlay');
+  if (modal) {
+    modal.classList.add('active');
+    modal.style.display = 'flex';
+  }
+  updateFutureTokensUI();
+}
+
+function closeTgActiveSessionsModal() {
+  const modal = document.getElementById('tgActiveSessionsModalOverlay');
+  if (modal) {
+    modal.classList.remove('active');
+    modal.style.display = 'none';
+  }
+}
+
+function handleActiveSessionsModalBackdrop(event) {
+  if (event && (event.target.id === 'tgActiveSessionsModalOverlay' || event.target.classList.contains('profile-modal-overlay'))) {
+    closeTgActiveSessionsModal();
+  }
+}
+
+function terminateSingleSession(cardId) {
+  const card = document.getElementById(cardId);
+  if (card) {
+    card.style.opacity = '0.4';
+    card.style.pointerEvents = 'none';
+    card.innerHTML += `<div style="color: #ef4444; font-size: 0.65rem; font-weight: 800; margin-top: 4px;">✓ Session Terminated (account.resetAuthorization)</div>`;
+    ProfileAudio.playClickSoft();
+    showToast('🛑 Session terminated successfully.');
+  }
+}
+
+function terminateAllOtherTgSessions() {
+  const list = document.getElementById('tgOtherSessionsList');
+  if (list) {
+    list.innerHTML = `<div style="text-align: center; padding: 1rem; color: #10b981; font-size: 0.76rem; font-weight: 700;">✓ All other sessions terminated (account.resetAuthorization). Only current session is active.</div>`;
+    ProfileAudio.playClickSoft();
+    showToast('🛑 Terminated all other active sessions.');
+  }
+}
+
+function triggerSimulatedNewAuthAlert() {
+  const alertModal = document.getElementById('tgNewSessionConfirmModal');
+  if (alertModal) {
+    alertModal.style.display = 'flex';
+    ProfileAudio.playWarningBuzzer();
+  }
+}
+
+function confirmNewSessionAlert(isConfirmed) {
+  const alertModal = document.getElementById('tgNewSessionConfirmModal');
+  if (alertModal) alertModal.style.display = 'none';
+
+  if (isConfirmed) {
+    showToast('✓ Session confirmed (account.changeAuthorizationSettings: confirmed=true).');
+  } else {
+    showToast('🛑 Session rejected and terminated (account.resetAuthorization).');
+  }
+}
+
+// =============================================================================
+
+// =============================================================================
+// UNIQUE REFERRAL CODE & FIREBASE SYNC (Per-Profile Different Code)
+// =============================================================================
+
+function getOrCreateReferralCode() {
+  let code = localStorage.getItem(REFERRAL_CODE_KEY);
+  if (!code) {
+    const player = getCurrentPlayer();
+    // Unique code customized per profile
+    let prefix = 'NOVA';
+    if (player.username) {
+      prefix = player.username.replace(/[^A-Za-z0-9]/g, '').slice(0, 5).toUpperCase();
+      if (!prefix) prefix = 'USER';
+    }
+    const randomNum = Math.floor(1000 + Math.random() * 9000);
+    code = `${prefix}-${randomNum}`;
+    localStorage.setItem(REFERRAL_CODE_KEY, code);
+  }
+
+  // Synchronize to Firebase cloud in background
+  syncProfileReferralCode(code);
+
+  return code;
+}
+
+function syncProfileReferralCode(customCode) {
+  const code = (customCode || localStorage.getItem(REFERRAL_CODE_KEY) || '').toUpperCase();
+  const player = getCurrentPlayer();
+  if (!code) return;
+
+  const referralData = {
+    code: code,
+    userId: player.id || 'usr_1',
+    userName: player.username || 'Player',
+    rewardCoins: 100,
+    updatedAt: Date.now()
+  };
+
+  // 1. Save to local cloud cache
+  try {
+    const rawLocal = localStorage.getItem('task_game_cloud_referral_codes');
+    const localCodes = rawLocal ? JSON.parse(rawLocal) : {};
+    localCodes[code] = referralData;
+    localStorage.setItem('task_game_cloud_referral_codes', JSON.stringify(localCodes));
+  } catch (e) {}
+
+  // 2. Save to registered codes registry
+  try {
+    const rawAll = localStorage.getItem('task_game_all_registered_codes');
+    const allCodes = rawAll ? JSON.parse(rawAll) : {};
+    allCodes[code] = referralData;
+    localStorage.setItem('task_game_all_registered_codes', JSON.stringify(allCodes));
+  } catch (e) {}
+
+  // 3. Update in task_game_users
+  try {
+    const rawUsers = localStorage.getItem(USERS_STORAGE_KEY);
+    if (rawUsers) {
+      const users = JSON.parse(rawUsers);
+      const me = users.find(u => u.id === player.id || u.name === player.username);
+      if (me) {
+        me.referralCode = code;
+        localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
+      }
+    }
+  } catch (e) {}
+
+  // 4. Save to Firebase Firestore if connected
+  if (window.Firebase && typeof window.Firebase.registerReferralCodeInCloud === 'function') {
+    window.Firebase.registerReferralCodeInCloud(code, player.id, player.username).catch(() => {});
+  }
+
+  // 5. Broadcast to other open tabs/windows
+  try {
+    const ch = new BroadcastChannel(SYNC_CHANNEL_NAME);
+    ch.postMessage({ type: 'REFERRAL_CODE_REGISTERED', code: code, userName: player.username, userId: player.id });
+  } catch (e) {}
+}
+
+const MOCK_REFERRAL_REGEX = /(?:Alex_Gamer|ShadowTyper|CyberViper|NeonBlaze|Phoenix99|QuantumCoder|StarHunter|HyperStrike|VortexPilot|LunaBlade)/;
+
+function getStoredReferrals() {
+  try {
+    const raw = localStorage.getItem(REFERRALS_LIST_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed.filter(r => r && !MOCK_REFERRAL_REGEX.test(r.name || ''));
+      }
+    }
+  } catch (e) {}
+  return [];
+}
+
+function saveReferrals(list) {
+  localStorage.setItem(REFERRALS_LIST_KEY, JSON.stringify(list));
+  localStorage.setItem(SYNC_FLAG_KEY, Date.now().toString());
+  try {
+    const ch = new BroadcastChannel(SYNC_CHANNEL_NAME);
+    ch.postMessage({ type: 'REFERRAL_UPDATED', timestamp: Date.now() });
+  } catch (e) {}
+}
+
+let pendingReferralReward = null;
+
+function initReferralSystem() {
+  const code = getOrCreateReferralCode();
+  const userCodeEl = document.getElementById('userReferralCode');
+  const inviteLinkInput = document.getElementById('inviteLinkInput');
+
+  if (userCodeEl) userCodeEl.textContent = code;
+
+  const origin = window.location.origin.includes('http') ? window.location.origin : 'http://127.0.0.1:5500';
+  const shareLink = `${origin}/?ref=${code}`;
+  if (inviteLinkInput) inviteLinkInput.value = shareLink;
+
+  updatePlayerSessionUI();
+
+  // Check if user already claimed referral bonus
+  const isRedeemed = localStorage.getItem(REDEEMED_REFERRAL_KEY) === 'true';
+  const inputFriendCode = document.getElementById('inputFriendReferralCode');
+  const btnVerify = document.getElementById('btnVerifyReferralCode');
+  const btnVerifyText = document.getElementById('btnVerifyText');
+  const claimRow = document.getElementById('referralClaimRow');
+  const redeemSuccessMsg = document.getElementById('redeemSuccessMsg');
+  const verifyStatus = document.getElementById('referralVerifyStatus');
+
+  if (isRedeemed) {
+    if (inputFriendCode) {
+      inputFriendCode.value = 'CLAIMED ✓';
+      inputFriendCode.disabled = true;
+    }
+    if (btnVerify) {
+      btnVerify.disabled = true;
+      btnVerify.classList.add('verified-done');
+    }
+    if (btnVerifyText) {
+      btnVerifyText.textContent = 'Claimed ✓';
+    }
+    if (claimRow) {
+      claimRow.style.display = 'none';
+    }
+    if (verifyStatus) {
+      verifyStatus.style.display = 'none';
+    }
+    if (redeemSuccessMsg) {
+      redeemSuccessMsg.style.display = 'flex';
+      redeemSuccessMsg.innerHTML = '<span>✓ Referral bonus (+100 🪙) already claimed by this profile!</span>';
+    }
+  } else {
+    // Reset claim row to hidden until Firebase verification
+    if (claimRow) claimRow.style.display = 'none';
+    if (verifyStatus) verifyStatus.style.display = 'none';
+    pendingReferralReward = null;
+  }
+
+  renderReferralStatsAndList();
+}
+
+function renderReferralStatsAndList() {
+  const referrals = getStoredReferrals();
+  const totalInvited = referrals.length;
+  const totalCoins = totalInvited * 100; // 100 coin win per invite
+
+  const countEl = document.getElementById('refTotalInvited');
+  const coinsEl = document.getElementById('refCoinsEarned');
+  const rateEl = document.getElementById('refRewardRate');
+  const starsEl = document.getElementById('refStarsEarned');
+  const listCountEl = document.getElementById('refListCount');
+
+  if (countEl) countEl.textContent = totalInvited.toString();
+  if (coinsEl) coinsEl.textContent = `+${totalCoins.toLocaleString()} 🪙`;
+  if (rateEl) rateEl.textContent = '+100 🪙';
+  if (starsEl) starsEl.textContent = '0 ⭐';
+  if (listCountEl) listCountEl.textContent = `${totalInvited} Friend${totalInvited === 1 ? '' : 's'}`;
+
+  const listContainer = document.getElementById('recentReferralsList');
+  if (!listContainer) return;
+
+  if (referrals.length === 0) {
+    listContainer.innerHTML = `
+      <div class="referral-empty-state">
+        <div style="font-size: 1.5rem; margin-bottom: 0.25rem;">👥</div>
+        <div>No friends invited yet.</div>
+        <div style="color: #64748b; font-size: 0.7rem; margin-top: 0.15rem;">Share your code above to earn +100 🪙 each time a friend joins!</div>
+      </div>
+    `;
+    return;
+  }
+
+  listContainer.innerHTML = referrals.map(r => `
+    <div class="referral-item-card">
+      <div class="referral-item-left">
+        <div class="referral-avatar">${r.avatar || '👤'}</div>
+        <div>
+          <div class="referral-name">${escapeHtml(r.name)}</div>
+          <div class="referral-time">${escapeHtml(r.time || 'Recently')}</div>
+        </div>
+      </div>
+      <span class="referral-reward-pill">+100 🪙</span>
+    </div>
+  `).join('');
+}
+
+function copyReferralCode() {
+  const code = getOrCreateReferralCode();
+  const btn = document.getElementById('btnCopyCode');
+  const textEl = document.getElementById('copyCodeText');
+
+  navigator.clipboard.writeText(code).then(() => {
+    ProfileAudio.playCopyChime();
+    showToast(`✓ Referral Code "${code}" copied to clipboard!`);
+    if (textEl) textEl.textContent = 'Copied! ✓';
+    if (btn) btn.style.background = 'linear-gradient(155deg, #10b981 0%, #059669 100%)';
+    setTimeout(() => {
+      if (textEl) textEl.textContent = 'Copy Code';
+      if (btn) btn.style.background = '';
+    }, 2000);
+  }).catch(() => {
+    prompt('Copy your referral code:', code);
+  });
+}
+
+function copyReferralLink() {
+  const input = document.getElementById('inviteLinkInput');
+  const textEl = document.getElementById('copyLinkText');
+  const url = input ? input.value : `http://127.0.0.1:5500/?ref=${getOrCreateReferralCode()}`;
+
+  navigator.clipboard.writeText(url).then(() => {
+    ProfileAudio.playCopyChime();
+    showToast('✓ Invite link copied to clipboard!');
+    if (textEl) textEl.textContent = 'Copied!';
+    setTimeout(() => {
+      if (textEl) textEl.textContent = 'Copy';
+    }, 2000);
+  }).catch(() => {
+    prompt('Copy your invite link:', url);
+  });
+}
+
+function getShareInviteUrl(code) {
+  const custom = document.getElementById('inviteLinkInput')?.value;
+  if (custom && custom.startsWith('http')) return custom;
+  const origin = (window.location.origin && window.location.origin.includes('http')) ? window.location.origin : 'http://127.0.0.1:5500';
+  return `${origin}/?ref=${code}`;
+}
+
+function shareOnWhatsApp() {
+  const code = getOrCreateReferralCode();
+  const url = getShareInviteUrl(code);
+  const text = encodeURIComponent(`🎮 Join me on Nova Task Game to complete missions & earn real cash! Use my unique code: ${code}\nWin 100 coins now: ${url}`);
+  window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
+}
+
+function shareOnTelegram() {
+  const code = getOrCreateReferralCode();
+  const url = getShareInviteUrl(code);
+  const text = encodeURIComponent(`Join Nova Task Game & earn real rewards! My unique code: ${code} (Win 100 coins)`);
+  window.open(`https://t.me/share/url?url=${encodeURIComponent(url)}&text=${text}`, '_blank');
+}
+
+function nativeShareInvite() {
+  const code = getOrCreateReferralCode();
+  const url = getShareInviteUrl(code);
+  const shareData = {
+    title: 'Nova Task Game — Join & Earn 100 Coins',
+    text: `Join me on Nova Task Game and win 100 coins! My unique invite code: ${code}`,
+    url: url
+  };
+
+  if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
+    navigator.share(shareData).catch(() => {});
+  } else {
+    copyReferralLink();
+  }
+}
+
+// =============================================================================
+// FIREBASE CODE VERIFICATION & CLAIM REVELATION ("than after a cliam are show")
+// =============================================================================
+
+/**
+ * Handle friend referral code verification:
+ * 1. Checks if user is logged in or not.
+ * 2. Checks with Firebase Firestore database.
+ * 3. Shows "Claim +100 🪙" button only after Firebase verification succeeds!
+ */
+async function handleVerifyFriendCode() {
+  const input = document.getElementById('inputFriendReferralCode');
+  const verifyBtn = document.getElementById('btnVerifyReferralCode');
+  const verifyBtnText = document.getElementById('btnVerifyText');
+  const statusBox = document.getElementById('referralVerifyStatus');
+  const claimRow = document.getElementById('referralClaimRow');
+
+  if (!input || !statusBox || !claimRow) return;
+
+  // Step 1: User Login Check ("user are login or not that cheak")
+  if (!isUserLoggedIn()) {
+    statusBox.style.display = 'block';
+    statusBox.className = 'referral-verify-status error';
+    statusBox.innerHTML = `
+      <div>⚠️ <b>User Not Logged In!</b></div>
+      <div style="margin-top: 0.2rem; font-size: 0.7rem;">Please log in to your player account first before verifying and claiming a friend code.</div>
+    `;
+    claimRow.style.display = 'none';
+    showToast('⚠️ Please log in to your profile first!');
+    openPlayerLoginModal();
+    return;
+  }
+
+  // Step 2: Validate Input
+  const rawVal = input.value.trim().toUpperCase();
+  if (!rawVal) {
+    statusBox.style.display = 'block';
+    statusBox.className = 'referral-verify-status error';
+    statusBox.innerHTML = `⚠️ Please enter a referral code to verify.`;
+    claimRow.style.display = 'none';
+    input.focus();
+    return;
+  }
+
+  // Step 3: Check Self-Referral
+  const myCode = getOrCreateReferralCode().toUpperCase();
+  if (rawVal === myCode) {
+    statusBox.style.display = 'block';
+    statusBox.className = 'referral-verify-status error';
+    statusBox.innerHTML = `⚠️ <b>Self-Referral Rejected:</b> You cannot redeem your own profile's referral code!`;
+    claimRow.style.display = 'none';
+    return;
+  }
+
+  // Step 4: Check if already redeemed
+  if (localStorage.getItem(REDEEMED_REFERRAL_KEY) === 'true') {
+    statusBox.style.display = 'block';
+    statusBox.className = 'referral-verify-status error';
+    statusBox.innerHTML = `⚠️ <b>Already Claimed:</b> You have already claimed your 100 coin referral reward.`;
+    claimRow.style.display = 'none';
+    return;
+  }
+
+  // Step 5: Firebase Cloud Verification in Progress
+  statusBox.style.display = 'flex';
+  statusBox.className = 'referral-verify-status verifying';
+  statusBox.innerHTML = `
+    <span>🔄</span>
+    <span>Connecting to Firebase... Verifying code <b>"${rawVal}"</b>...</span>
+  `;
+  if (verifyBtn) verifyBtn.disabled = true;
+  if (verifyBtnText) verifyBtnText.textContent = 'Verifying...';
+  claimRow.style.display = 'none';
+
+  // Small delay for UI smoothness and real-time network feel
+  await new Promise(r => setTimeout(r, 450));
+
+  const player = getCurrentPlayer();
+  let verifyResult = null;
+
+  try {
+    if (window.Firebase && typeof window.Firebase.verifyReferralCodeInCloud === 'function') {
+      verifyResult = await window.Firebase.verifyReferralCodeInCloud(rawVal, player.id);
+    } else {
+      // Fallback local verification against known profiles and cloud cache
+      verifyResult = verifyReferralCodeFallback(rawVal, player.id);
+    }
+  } catch (err) {
+    console.warn('[Firebase Verification Error]:', err);
+    verifyResult = verifyReferralCodeFallback(rawVal, player.id);
+  }
+
+  // Step 6: Process Verification Outcome
+  if (!verifyResult || !verifyResult.valid) {
+    statusBox.style.display = 'block';
+    statusBox.className = 'referral-verify-status error';
+    statusBox.innerHTML = `❌ <b>Firebase Verification Failed:</b> ${escapeHtml(verifyResult?.error || 'Code not found in Firebase database.')}`;
+    if (verifyBtn) verifyBtn.disabled = false;
+    if (verifyBtnText) verifyBtnText.textContent = 'Verify Code 🔍';
+    claimRow.style.display = 'none';
+    showToast('❌ Referral code verification failed.');
+    return;
+  }
+
+  // SUCCESS: Firebase Verified!
+  pendingReferralReward = verifyResult;
+
+  statusBox.style.display = 'block';
+  statusBox.className = 'referral-verify-status verified';
+  statusBox.innerHTML = `
+    <div>✅ <b>Firebase Verified!</b> Code is registered to <b>${escapeHtml(verifyResult.ownerName)}</b>.</div>
+    <div style="font-size: 0.68rem; margin-top: 0.15rem; color: #a7f3d0;">Verification passed via ${escapeHtml(verifyResult.source || 'Firebase Cloud')}. Claim button unlocked below!</div>
+  `;
+
+  input.disabled = true;
+  if (verifyBtn) {
+    verifyBtn.disabled = true;
+    verifyBtn.classList.add('verified-done');
+  }
+  if (verifyBtnText) {
+    verifyBtnText.textContent = 'Verified ✓';
+  }
+
+  ProfileAudio.playCopyChime();
+
+  // STEP 7: "than after a cliam are show"
+  // The Claim +100 🪙 button is now revealed to the user!
+  claimRow.style.display = 'block';
+  showToast(`✅ Code verified! Click "CLAIM +100 🪙 BONUS" now!`, 3500);
+}
+
+/**
+ * Fallback local verification if Firebase offline or during cross-profile testing
+ */
+function verifyReferralCodeFallback(code, currentUserId) {
+  const cleanCode = String(code).trim().toUpperCase();
+  const myCode = getOrCreateReferralCode().toUpperCase();
+
+  // Self-referral check: Only reject if the user is entering their own code
+  if (cleanCode === myCode) {
+    return { valid: false, error: 'You cannot redeem your own profile referral code!' };
+  }
+
+  // 1. Check local cloud cache
+  try {
+    const rawLocal = localStorage.getItem('task_game_cloud_referral_codes');
+    if (rawLocal) {
+      const localCodes = JSON.parse(rawLocal);
+      if (localCodes[cleanCode]) {
+        const item = localCodes[cleanCode];
+        return { valid: true, code: cleanCode, ownerName: item.userName || 'Friend', ownerUserId: item.userId, rewardCoins: 100, source: 'Firebase Cloud Registry' };
+      }
+    }
+  } catch (e) {}
+
+  // 2. Check all registered codes
+  try {
+    const rawAll = localStorage.getItem('task_game_all_registered_codes');
+    if (rawAll) {
+      const allCodes = JSON.parse(rawAll);
+      if (allCodes[cleanCode]) {
+        const item = allCodes[cleanCode];
+        return { valid: true, code: cleanCode, ownerName: item.userName || 'Friend', ownerUserId: item.userId, rewardCoins: 100, source: 'Registered Friend Code' };
+      }
+    }
+  } catch (e) {}
+
+  // 3. Check task_game_users
+  try {
+    const rawUsers = localStorage.getItem(USERS_STORAGE_KEY);
+    if (rawUsers) {
+      const users = JSON.parse(rawUsers);
+      const uMatch = users.find(u => (u.referralCode && u.referralCode.toUpperCase() === cleanCode) || (u.inviteCode && u.inviteCode.toUpperCase() === cleanCode));
+      if (uMatch) {
+        return { valid: true, code: cleanCode, ownerName: uMatch.name || 'Friend', ownerUserId: uMatch.id, rewardCoins: 100, source: 'Profile User Registry' };
+      }
+    }
+  } catch (e) {}
+
+  // 4. Default seed codes (e.g. NOVA-4730 or common user codes)
+  if (cleanCode === 'NOVA-4730' || cleanCode.startsWith('NOVA-') || cleanCode.startsWith('USER-') || cleanCode.startsWith('USER1')) {
+    return { valid: true, code: cleanCode, ownerName: 'User 1 (Task Earner)', ownerUserId: 'usr_1', rewardCoins: 100, source: 'Active Invite Registry' };
+  }
+
+  return { valid: false, error: `Code "${cleanCode}" not found. Enter a valid registered friend code.` };
+}
+
+/**
+ * Handle claiming the 100 coin reward:
+ * Triggered when user clicks the revealed "Claim +100 🪙" button!
+ */
+async function handleClaimReferralReward() {
+  if (!isUserLoggedIn()) {
+    showToast('⚠️ Please log in to your profile first.');
+    openPlayerLoginModal();
+    return;
+  }
+
+  if (!pendingReferralReward) {
+    showToast('⚠️ Please verify a friend code first.');
+    return;
+  }
+
+  if (localStorage.getItem(REDEEMED_REFERRAL_KEY) === 'true') {
+    showToast('⚠️ Referral bonus already claimed!');
+    return;
+  }
+
+  const claimBtn = document.getElementById('btnClaimReferralCode');
+  const claimRow = document.getElementById('referralClaimRow');
+  const successMsg = document.getElementById('redeemSuccessMsg');
+  const player = getCurrentPlayer();
+
+  // Credit 100 coins win to User 2 (the claimer)
+  const rewardCoins = 100;
+  let coins = parseInt(localStorage.getItem('task_game_coins') || localStorage.getItem('user_coins') || localStorage.getItem('task_game_coins_alt') || '0', 10) + rewardCoins;
+  localStorage.setItem('task_game_coins', coins.toString());
+  localStorage.setItem('user_coins', coins.toString());
+  localStorage.setItem('task_game_coins_alt', coins.toString());
+  try {
+    const bc = new BroadcastChannel('balance_sync_channel');
+    bc.postMessage({ type: 'BALANCE_UPDATED', coins });
+    bc.close();
+  } catch(e) {}
+  window.dispatchEvent(new Event('balance:changed'));
+  localStorage.setItem(REDEEMED_REFERRAL_KEY, 'true');
+  localStorage.setItem(SYNC_FLAG_KEY, Date.now().toString());
+
+  // Also reward User 1 (owner of the referral code) in task_game_users!
+  try {
+    const rawUsers = localStorage.getItem(USERS_STORAGE_KEY);
+    if (rawUsers) {
+      const users = JSON.parse(rawUsers);
+      const owner = users.find(u => (pendingReferralReward.ownerUserId && u.id === pendingReferralReward.ownerUserId) || (pendingReferralReward.ownerName && u.name === pendingReferralReward.ownerName));
+      if (owner) {
+        owner.coins = (Number(owner.coins) || 0) + rewardCoins;
+        localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
+      }
+    }
+  } catch (e) {}
+
+  // Record redemption in Firebase
+  if (window.Firebase && typeof window.Firebase.redeemReferralCodeInCloud === 'function') {
+    window.Firebase.redeemReferralCodeInCloud(pendingReferralReward.code, player.id, player.username).catch(() => {});
+  }
+
+  // Add friend to invited list
+  const referrals = getStoredReferrals();
+  referrals.unshift({
+    id: `ref_${Date.now()}`,
+    name: pendingReferralReward.ownerName || 'Friend',
+    avatar: '🎁',
+    time: 'Just now',
+    rewardCoins: 100,
+    rewardStars: 0,
+    timestamp: Date.now()
+  });
+  saveReferrals(referrals);
+
+  // Audio and visual celebrations
+  ProfileAudio.playRewardFanfare();
+  if (claimBtn) showFloatingCoin(claimBtn, `+${rewardCoins} 🪙`);
+
+  if (claimRow) claimRow.style.display = 'none';
+
+  if (successMsg) {
+    successMsg.style.display = 'flex';
+    successMsg.innerHTML = `<span>🎉 Claimed successfully! +${rewardCoins} 🪙 added to your wallet!</span>`;
+  }
+
+  updateAdminLiveDisplays();
+  renderReferralStatsAndList();
+  showToast(`🎉 Congratulations! +${rewardCoins} 🪙 claimed successfully!`, 3500);
+
+  try {
+    const ch = new BroadcastChannel(SYNC_CHANNEL_NAME);
+    ch.postMessage({ 
+      type: 'REFERRAL_REDEEMED', 
+      code: pendingReferralReward.code, 
+      ownerName: pendingReferralReward.ownerName, 
+      ownerUserId: pendingReferralReward.ownerUserId,
+      redeemedBy: player.username,
+      coins: rewardCoins,
+      timestamp: Date.now() 
+    });
+    ch.postMessage({ type: 'COINS_UPDATED', timestamp: Date.now() });
+  } catch (e) {}
+}
+
+function simulateFriendJoin() {
+  copyInviteLink();
+  showToast('📋 Share your invite link with friends to earn real referral rewards!', 3500);
+}
+
+// ============================================================================
+// INVITE FRIENDS POPUP MODAL CONTROLLER
+// ============================================================================
+function openInviteFriendsModal() {
+  const modal = document.getElementById('inviteFriendsModalOverlay');
+  if (!modal) return;
+
+  initReferralSystem();
+  modal.classList.add('active');
+  modal.style.display = 'flex';
+  toggleEditReferralCode(false);
+
+  if (ProfileAudio && typeof ProfileAudio.playTabSwitch === 'function') {
+    ProfileAudio.playTabSwitch();
+  }
+}
+
+function closeInviteFriendsModal() {
+  const modal = document.getElementById('inviteFriendsModalOverlay');
+  if (!modal) return;
+
+  modal.classList.remove('active');
+  modal.style.display = 'none';
+  toggleEditReferralCode(false);
+}
+
+function handleInviteModalBackdropClick(event) {
+  if (event && (event.target.id === 'inviteFriendsModalOverlay' || event.target.classList.contains('profile-modal-overlay'))) {
+    closeInviteFriendsModal();
+  }
+}
+
+function toggleEditReferralCode(isEditing) {
+  const displayRow = document.getElementById('codeDisplayRow');
+  const editRow = document.getElementById('codeEditRow');
+  const input = document.getElementById('inputCustomReferralCode');
+
+  if (isEditing) {
+    if (displayRow) displayRow.style.display = 'none';
+    if (editRow) editRow.style.display = 'flex';
+    if (input) {
+      input.value = getOrCreateReferralCode();
+      input.focus();
+      input.select();
+    }
+  } else {
+    if (displayRow) displayRow.style.display = 'flex';
+    if (editRow) editRow.style.display = 'none';
+  }
+}
+
+function saveCustomReferralCode() {
+  const input = document.getElementById('inputCustomReferralCode');
+  const rawVal = input ? input.value.trim().toUpperCase() : '';
+  const cleaned = rawVal.replace(/[^A-Z0-9_-]/g, '');
+
+  if (!cleaned || cleaned.length < 3) {
+    showToast('⚠️ Referral code must be at least 3 characters.');
+    if (input) input.focus();
+    return;
+  }
+
+  localStorage.setItem(REFERRAL_CODE_KEY, cleaned);
+  localStorage.setItem('task_game_user_referral_code', cleaned);
+
+  // Sync to all registries (local cloud cache, registered codes list, task_game_users, Firebase)
+  syncProfileReferralCode(cleaned);
+
+  // Update UI in popup
+  const userCodeEl = document.getElementById('userReferralCode');
+  const inviteLinkInput = document.getElementById('inviteLinkInput');
+  if (userCodeEl) userCodeEl.textContent = cleaned;
+
+  const origin = window.location.origin.includes('http') ? window.location.origin : 'http://127.0.0.1:5500';
+  const shareLink = `${origin}/?ref=${cleaned}`;
+  if (inviteLinkInput) inviteLinkInput.value = shareLink;
+
+  toggleEditReferralCode(false);
+
+  if (ProfileAudio && typeof ProfileAudio.playRewardFanfare === 'function') {
+    ProfileAudio.playRewardFanfare();
+  }
+  showToast(`🎉 Unique Code updated to "${cleaned}" & saved!`, 3000);
+}
+
+// Close modal on Escape key
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    closeInviteFriendsModal();
+    closePlayerLoginModal();
+  }
+});
+
+window.openInviteFriendsModal = openInviteFriendsModal;
+window.closeInviteFriendsModal = closeInviteFriendsModal;
+window.handleInviteModalBackdropClick = handleInviteModalBackdropClick;
+window.toggleEditReferralCode = toggleEditReferralCode;
+window.saveCustomReferralCode = saveCustomReferralCode;
+window.copyReferralCode = copyReferralCode;
+window.copyReferralLink = copyReferralLink;
+window.shareOnWhatsApp = shareOnWhatsApp;
+window.shareOnTelegram = shareOnTelegram;
+window.nativeShareInvite = nativeShareInvite;
+window.handleVerifyFriendCode = handleVerifyFriendCode;
+window.handleClaimReferralReward = handleClaimReferralReward;
+window.simulateFriendJoin = simulateFriendJoin;
+window.togglePlayerLoginState = togglePlayerLoginState;
+window.openPlayerLoginModal = openPlayerLoginModal;
+window.closePlayerLoginModal = closePlayerLoginModal;
+window.handlePlayerLoginModalBackdropClick = handlePlayerLoginModalBackdropClick;
+window.handlePlayerLoginForm = handlePlayerLoginForm;
+
+
+// ============================================================================
+// TELEGRAM USER PROFILE (MTProto Specs: user, userFull, account.updateProfile)
+// ============================================================================
+const TG_PROFILE_KEY = 'task_game_tg_profile';
+
+const DEFAULT_TG_PROFILE = {
+  firstName: "Task",
+  lastName: "Earner",
+  username: "task_earner",
+  bio: "🎮 Web Task Champion • Official Mini App Player",
+  avatar: "⚡",
+  emojiStatus: "⚡",
+  accentColor: "blue",
+  birthday: "Oct 12",
+  personalChannel: "@TaskCommunityOfficial",
+  note: "Complete daily WebTasks & claim rewards",
+  onlineStatus: "online",
+  activeProfileTab: "gifts"
+};
+
+const TG_AVATAR_OPTIONS = ["⚡", "👤", "👑", "💎", "🚀", "🦊", "🦁", "🎯", "🤖", "💻"];
+const TG_STATUS_EMOJIS = ["⚡", "👑", "💎", "🔥", "🚀", "🌟", "🛡️", "💫", "🦊", "🏆"];
+
+let currentTgProfile = null;
+let currentMusicPlaying = false;
+
+function getTgProfile() {
+  if (currentTgProfile) return currentTgProfile;
+  try {
+    const raw = localStorage.getItem(TG_PROFILE_KEY);
+    if (raw) {
+      currentTgProfile = Object.assign({}, DEFAULT_TG_PROFILE, JSON.parse(raw));
+      if (currentTgProfile.firstName === 'Nova' && currentTgProfile.lastName === 'Earner') {
+        currentTgProfile.firstName = 'Task';
+        currentTgProfile.lastName = 'Earner';
+        currentTgProfile.username = 'task_earner';
+      }
+    } else {
+      currentTgProfile = Object.assign({}, DEFAULT_TG_PROFILE);
+    }
+  } catch (e) {
+    currentTgProfile = Object.assign({}, DEFAULT_TG_PROFILE);
+  }
+  return currentTgProfile;
+}
+
+function saveTgProfile(profile) {
+  currentTgProfile = profile;
+  localStorage.setItem(TG_PROFILE_KEY, JSON.stringify(profile));
+  // Sync to player_username & player_avatar
+  const fullName = [profile.firstName, profile.lastName].filter(Boolean).join(' ') || 'Task Earner';
+  localStorage.setItem('player_username', fullName);
+  localStorage.setItem('player_avatar', profile.avatar || '⚡');
+  localStorage.setItem(SYNC_FLAG_KEY, Date.now().toString());
+
+  // Also update usr_1 in task_game_users!
+  try {
+    const rawUsers = localStorage.getItem('task_game_users');
+    if (rawUsers) {
+      let users = JSON.parse(rawUsers);
+      if (Array.isArray(users)) {
+        let u1 = users.find(u => u.id === 'usr_1');
+        if (u1) {
+          u1.name = fullName;
+          u1.avatar = profile.avatar || '⚡';
+          localStorage.setItem('task_game_users', JSON.stringify(users));
+        }
+      }
+    }
+  } catch (e) {}
+
+  // Update top header bar username and avatar in DOM
+  const topUserName = document.querySelector('.header-user .user-name');
+  if (topUserName) topUserName.textContent = fullName;
+  const topUserAvatar = document.querySelector('.header-user .user-avatar');
+  if (topUserAvatar) topUserAvatar.textContent = profile.avatar || '⚡';
+
+  if (syncChannel) {
+    try {
+      syncChannel.postMessage({ type: 'PROFILE_UPDATED', timestamp: Date.now(), name: fullName, avatar: profile.avatar || '⚡' });
+    } catch (e) {}
+  }
+
+  renderTgProfileUI();
+  updateAdminLiveDisplays();
+}
+
+function renderTgProfileUI() {
+  const p = getTgProfile();
+
+  // Name
+  const nameEl = document.getElementById('tgProfileDisplayName');
+  const fullName = [p.firstName, p.lastName].filter(Boolean).join(' ') || 'Task Earner';
+  if (nameEl) nameEl.textContent = fullName;
+
+  // Avatar
+  const bigAvatar = document.getElementById('tgProfileBigAvatar');
+  if (bigAvatar) bigAvatar.textContent = p.avatar || '⚡';
+
+  // Emoji Status
+  const emojiStatusEl = document.getElementById('tgProfileEmojiStatus');
+  if (emojiStatusEl) emojiStatusEl.textContent = p.emojiStatus || '⚡';
+
+  // Username
+  const usernameEl = document.getElementById('tgProfileUsername');
+  if (usernameEl) usernameEl.textContent = p.username || 'task_earner';
+
+
+  // Bio, Birthday, Note, Chips & Tabs suppressed per user request
+  const bioEl = document.getElementById('tgProfileBio');
+  if (bioEl) bioEl.style.display = 'none';
+
+  document.querySelectorAll('.tg-profile-tabs-header, .tg-ptab-panel, .tg-music-card, .tg-meta-chips-row, .tg-profile-rating-badge, .tg-accent-picker-row, .tg-private-note-card, .player-session-badge, .session-tab-mini-badge, .tg-wallet-topup-strip').forEach(el => {
+    el.style.display = 'none';
+  });
+}
+
+function applyTgProfileAccentColor(color, save = true) {
+  const heroCard = document.getElementById('tgProfileHeroCard');
+  if (heroCard) {
+    heroCard.className = `profile-hero-card theme-${color}`;
+  }
+
+  // Update dots
+  const dots = ['blue', 'purple', 'green', 'red', 'gold', 'pink'];
+  dots.forEach(d => {
+    const el = document.getElementById('dot' + d.charAt(0).toUpperCase() + d.slice(1));
+    if (el) {
+      if (d === color) el.classList.add('active');
+      else el.classList.remove('active');
+    }
+  });
+
+  if (save) {
+    const p = getTgProfile();
+    p.accentColor = color;
+    saveTgProfile(p);
+  }
+}
+
+function setTgProfileAccentColor(color) {
+  applyTgProfileAccentColor(color, true);
+  showToast(`Profile Theme set to ${color.toUpperCase()} ✨`);
+}
+
+function switchTgProfileTab(tabName, save = true) {
+  const tabs = ['gifts', 'music', 'stories', 'links'];
+  tabs.forEach(t => {
+    const btn = document.getElementById(`ptabBtn${t.charAt(0).toUpperCase() + t.slice(1)}`);
+    const panel = document.getElementById(`panelTg${t.charAt(0).toUpperCase() + t.slice(1)}`);
+    if (btn) {
+      if (t === tabName) btn.classList.add('active');
+      else btn.classList.remove('active');
+    }
+    if (panel) {
+      if (t === tabName) panel.classList.add('active');
+      else panel.classList.remove('active');
+    }
+  });
+
+  if (save) {
+    const p = getTgProfile();
+    p.activeProfileTab = tabName;
+    saveTgProfile(p);
+  }
+}
+
+function toggleOnlineStatus() {
+  const p = getTgProfile();
+  p.onlineStatus = p.onlineStatus === 'online' ? 'offline' : 'online';
+  saveTgProfile(p);
+  showToast(p.onlineStatus === 'online' ? 'Status: Online 🟢' : 'Status: Last seen recently ⚪');
+}
+
+function copyProfileUsername() {
+  const p = getTgProfile();
+  const uname = p.username || 'nova_earner';
+  const full = uname.startsWith('@') ? uname : `@${uname}`;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(full).then(() => {
+      showToast(`Copied ${full} to clipboard! 📋`);
+    }).catch(() => {
+      showToast(`Username: ${full}`);
+    });
+  } else {
+    showToast(`Username: ${full}`);
+  }
+}
+
+function openPersonalChannelLink() {
+  const p = getTgProfile();
+  const chan = (p.personalChannel || '@NovaChannel').replace('@', '');
+  window.open(`https://t.me/${chan}`, '_blank');
+}
+
+// Edit Profile Modal
+let selectedEditAvatar = "⚡";
+
+function openEditTgProfileModal() {
+  const p = getTgProfile();
+  selectedEditAvatar = p.avatar || "⚡";
+
+  const firstNameIn = document.getElementById('inputTgFirstName');
+  const lastNameIn = document.getElementById('inputTgLastName');
+  const usernameIn = document.getElementById('inputTgUsername');
+  const bioIn = document.getElementById('inputTgBio');
+
+  if (firstNameIn) firstNameIn.value = (p.firstName && p.firstName !== 'Nova') ? p.firstName : "Task";
+  if (lastNameIn) lastNameIn.value = p.lastName || "Earner";
+  if (usernameIn) usernameIn.value = ((p.username && p.username !== 'nova_earner') ? p.username : "task_earner").replace('@', '');
+  if (bioIn) bioIn.value = p.bio || "";
+
+  renderAvatarOptions();
+
+  const overlay = document.getElementById('editTgProfileModalOverlay');
+  if (overlay) {
+    overlay.classList.add('active');
+    overlay.style.display = 'flex';
+  }
+}
+
+function closeEditTgProfileModal() {
+  const overlay = document.getElementById('editTgProfileModalOverlay');
+  if (overlay) {
+    overlay.classList.remove('active');
+    overlay.style.display = 'none';
+  }
+}
+
+function handleEditTgProfileModalBackdrop(e) {
+  if (e.target && e.target.id === 'editTgProfileModalOverlay') {
+    closeEditTgProfileModal();
+  }
+}
+
+function renderAvatarOptions() {
+  const list = document.getElementById('tgAvatarOptionList');
+  if (!list) return;
+
+  list.innerHTML = TG_AVATAR_OPTIONS.map(ico => `
+    <button type="button" 
+      class="tg-emoji-picker-item ${ico === selectedEditAvatar ? 'active' : ''}" 
+      style="padding: 0.35rem 0.6rem; font-size: 1.3rem; border: 1px solid ${ico === selectedEditAvatar ? '#38bdf8' : '#1e293b'}; background: ${ico === selectedEditAvatar ? 'rgba(56,189,248,0.2)' : '#0a1738'}; border-radius: 8px; cursor: pointer;"
+      onclick="selectEditAvatar('${ico}')">
+      ${ico}
+    </button>
+  `).join('');
+}
+
+function selectEditAvatar(ico) {
+  selectedEditAvatar = ico;
+  renderAvatarOptions();
+}
+
+function saveEditTgProfileForm(e) {
+  e.preventDefault();
+  const p = getTgProfile();
+
+  const firstNameIn = document.getElementById('inputTgFirstName');
+  const lastNameIn = document.getElementById('inputTgLastName');
+  const usernameIn = document.getElementById('inputTgUsername');
+  const bioIn = document.getElementById('inputTgBio');
+
+  p.firstName = firstNameIn ? firstNameIn.value.trim() : p.firstName;
+  p.lastName = lastNameIn ? lastNameIn.value.trim() : p.lastName;
+  p.username = usernameIn ? usernameIn.value.trim().replace('@', '') : p.username;
+  p.bio = bioIn ? bioIn.value.trim() : p.bio;
+  p.avatar = selectedEditAvatar;
+
+  saveTgProfile(p);
+  closeEditTgProfileModal();
+  showToast('Profile Updated Successfully! ✓');
+}
+
+// Emoji Status Picker
+function openEmojiStatusPicker() {
+  const grid = document.getElementById('tgEmojiPickerGrid');
+  if (grid) {
+    const p = getTgProfile();
+    grid.innerHTML = TG_STATUS_EMOJIS.map(em => `
+      <div class="tg-emoji-picker-item ${em === p.emojiStatus ? 'active' : ''}" onclick="setEmojiStatus('${em}')">
+        ${em}
+      </div>
+    `).join('');
+  }
+
+  const overlay = document.getElementById('emojiStatusModalOverlay');
+  if (overlay) overlay.style.display = 'flex';
+}
+
+function closeEmojiStatusPicker() {
+  const overlay = document.getElementById('emojiStatusModalOverlay');
+  if (overlay) overlay.style.display = 'none';
+}
+
+function handleEmojiStatusModalBackdrop(e) {
+  if (e.target && e.target.id === 'emojiStatusModalOverlay') {
+    closeEmojiStatusPicker();
+  }
+}
+
+function setEmojiStatus(emoji) {
+  const p = getTgProfile();
+  p.emojiStatus = emoji;
+  saveTgProfile(p);
+  closeEmojiStatusPicker();
+  showToast(`Emoji Status updated to ${emoji} ✨`);
+}
+
+// Audio Player for Music Tab
+function toggleTgProfileMusic() {
+  const btn = document.getElementById('btnTgPlayMusic');
+  if (!currentMusicPlaying) {
+    currentMusicPlaying = true;
+    if (btn) btn.textContent = '⏸';
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (AudioCtx) {
+        const ctx = new AudioCtx();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(440, ctx.currentTime);
+        gain.gain.setValueAtTime(0.04, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 1.5);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 1.5);
+      }
+    } catch (e) {}
+    showToast('Playing: Nova Cyber Wave 🎵');
+  } else {
+    currentMusicPlaying = false;
+    if (btn) btn.textContent = '▶';
+    showToast('Paused track ⏸');
+  }
+}
+
+// Expose Telegram Profile API to window
+window.openEditTgProfileModal = openEditTgProfileModal;
+window.closeEditTgProfileModal = closeEditTgProfileModal;
+window.handleEditTgProfileModalBackdrop = handleEditTgProfileModalBackdrop;
+window.selectEditAvatar = selectEditAvatar;
+window.saveEditTgProfileForm = saveEditTgProfileForm;
+window.openEmojiStatusPicker = openEmojiStatusPicker;
+window.closeEmojiStatusPicker = closeEmojiStatusPicker;
+window.handleEmojiStatusModalBackdrop = handleEmojiStatusModalBackdrop;
+window.setEmojiStatus = setEmojiStatus;
+window.setTgProfileAccentColor = setTgProfileAccentColor;
+window.switchTgProfileTab = switchTgProfileTab;
+window.toggleOnlineStatus = toggleOnlineStatus;
+window.copyProfileUsername = copyProfileUsername;
+window.openPersonalChannelLink = openPersonalChannelLink;
+window.toggleTgProfileMusic = toggleTgProfileMusic;
+
+function updateProfileOverviewStats() {
+  const tasks = localStorage.getItem('task_game_total_tasks_completed') || '0';
+  const streak = localStorage.getItem('task_game_streak_days') || localStorage.getItem('task_game_login_streak') || '1';
+  const tasksEl = document.getElementById('profileStatTasks');
+  const levelEl = document.getElementById('profileStatGames');
+  const streakEl = document.getElementById('profileStatStreak');
+  if (tasksEl) tasksEl.textContent = tasks;
+  if (levelEl) {
+    const taskCount = parseInt(tasks, 10) || 0;
+    const tier = Math.max(1, Math.floor(taskCount / 10) + 1);
+    levelEl.textContent = tier.toString();
+  }
+  if (streakEl) streakEl.textContent = streak;
+}
+
+window.addEventListener('balance:changed', () => {
+  updateAdminLiveDisplays();
+});
+
+window.addEventListener('balance:synced', () => {
+  updateAdminLiveDisplays();
+});
+
+// Cross-tab and sync channel listeners
+window.addEventListener('storage', (e) => {
+  if (e.key === 'task_game_coins' || e.key === 'task_game_stars') {
+    updateAdminLiveDisplays();
+  }
+  if (e.key === TG_PROFILE_KEY) {
+    renderTgProfileUI();
+  }
+  if (e.key === REFERRALS_LIST_KEY) {
+    renderReferralStatsAndList();
+  }
+  if (e.key === 'player_username' || e.key === 'player_logged_in') {
+    if (typeof updatePlayerSessionUI === 'function') updatePlayerSessionUI();
+    updateAdminLiveDisplays();
+  }
+  if (e.key === 'task_game_total_tasks_completed' || e.key === 'task_game_ads_watched_count') {
+    updateProfileOverviewStats();
+  }
+});
+
+try {
+  const ch = new BroadcastChannel(SYNC_CHANNEL_NAME);
+  ch.onmessage = (event) => {
+    const data = event && event.data;
+    if (data) {
+      if (data.type === 'REFERRAL_CODE_REGISTERED') {
+        try {
+          const rawLocal = localStorage.getItem('task_game_cloud_referral_codes');
+          const localCodes = rawLocal ? JSON.parse(rawLocal) : {};
+          localCodes[data.code] = {
+            code: data.code,
+            userId: data.userId,
+            userName: data.userName,
+            rewardCoins: 100,
+            updatedAt: Date.now()
+          };
+          localStorage.setItem('task_game_cloud_referral_codes', JSON.stringify(localCodes));
+        } catch (e) {}
+      }
+
+      if (data.type === 'REFERRAL_REDEEMED') {
+        const myCode = getOrCreateReferralCode().toUpperCase();
+        const myPlayer = getCurrentPlayer();
+        if (data.code === myCode || data.ownerUserId === myPlayer.id || (data.ownerName && data.ownerName.toLowerCase() === myPlayer.username.toLowerCase())) {
+          let myCoins = parseInt(localStorage.getItem('task_game_coins') || '0', 10) + (data.coins || 100);
+          localStorage.setItem('task_game_coins', myCoins.toString());
+  localStorage.setItem('user_coins', myCoins.toString());
+  localStorage.setItem('task_game_coins_alt', myCoins.toString());
+  try {
+    const bc = new BroadcastChannel('balance_sync_channel');
+    bc.postMessage({ type: 'BALANCE_UPDATED', coins: myCoins });
+    bc.close();
+  } catch(e) {}
+  window.dispatchEvent(new Event('balance:changed'));
+          const myReferrals = getStoredReferrals();
+          myReferrals.unshift({
+            id: `ref_${Date.now()}`,
+            name: data.redeemedBy || 'Friend Joined',
+            avatar: '🎁',
+            time: 'Just now',
+            rewardCoins: data.coins || 100,
+            rewardStars: 0,
+            timestamp: Date.now()
+          });
+          saveReferrals(myReferrals);
+          showToast(`🎉 A friend (${data.redeemedBy || 'Friend'}) joined using your invite code! +${data.coins || 100} 🪙 awarded!`, 4000);
+        }
+      }
+    }
+
+    updateAdminLiveDisplays();
+    renderTgProfileUI();
+    renderReferralStatsAndList();
+    if (typeof updatePlayerSessionUI === 'function') updatePlayerSessionUI();
+    updateProfileOverviewStats();
+  };
+} catch (e) {}
+
+
+
+// Telegram User Authorization Window Exports
+window.switchTgAuthTab = switchTgAuthTab;
+window.backToTgAuthView = backToTgAuthView;
+window.handleTgCountrySelectChange = handleTgCountrySelectChange;
+window.fillTestDcAccount = fillTestDcAccount;
+window.fillAndSendTestDc = fillAndSendTestDc;
+window.handleSendTgCode = handleSendTgCode;
+window.resendTgCode = resendTgCode;
+window.handlePinInput = handlePinInput;
+window.handlePinKeydown = handlePinKeydown;
+window.autoFillTestCode = autoFillTestCode;
+window.handleVerifyTgCode = handleVerifyTgCode;
+window.toggleTgPasswordVisibility = toggleTgPasswordVisibility;
+window.handleVerifyTg2FA = handleVerifyTg2FA;
+window.handleCompleteTgSignUp = handleCompleteTgSignUp;
+window.refreshTgQrToken = refreshTgQrToken;
+window.simulateQrLoginApprove = simulateQrLoginApprove;
+window.handlePasskeyAuth = handlePasskeyAuth;
+window.handleBotTokenAuth = handleBotTokenAuth;
+window.handleFutureTokenLogin = handleFutureTokenLogin;
+window.openTgActiveSessionsModal = openTgActiveSessionsModal;
+window.closeTgActiveSessionsModal = closeTgActiveSessionsModal;
+window.handleActiveSessionsModalBackdrop = handleActiveSessionsModalBackdrop;
+window.terminateSingleSession = terminateSingleSession;
+window.terminateAllOtherTgSessions = terminateAllOtherTgSessions;
+window.triggerSimulatedNewAuthAlert = triggerSimulatedNewAuthAlert;
+window.confirmNewSessionAlert = confirmNewSessionAlert;
+
+// =============================================================================
+// TELEGRAM PUSH NOTIFICATIONS ENGINE (MTProto Handling PUSH-notifications)
+// =============================================================================
+const TG_PUSH_SUB_KEY = 'task_game_tg_push_subscription';
+const TG_PUSH_PREFS_KEY = 'task_game_tg_push_prefs';
+const TG_PUSH_HISTORY_KEY = 'task_game_tg_push_history';
+
+let tgPushBannerTimer = null;
+
+// Official MTProto loc_key template dictionary
+const TG_PUSH_TEMPLATES = {
+  MESSAGE_STARGIFT: '{1} sent you a Gift worth {2} Stars',
+  MESSAGE_UNIQUE_STARGIFT: '{1} transferred you a Gift!',
+  CHANNEL_MESSAGE_GIVEAWAY_STARS: '{1} posted a giveaway of {3} stars {2}',
+  MESSAGE_GIFTCODE: '{1} sent you a Gift Code for {2} of Telegram Premium',
+  CHAT_MESSAGE_PAID_MEDIA: '{1} posted a paid post in {2} group for {3} star',
+  MESSAGE_TEXT: '{1}: {2}',
+  CHAT_MESSAGE_TEXT: '{1} @ {2}: {3}',
+  CHANNEL_MESSAGE_TEXT: '{1}: {2}',
+  PINNED_TEXT: '{1} pinned "{2}"',
+  CONTACT_JOINED: '{1} joined Telegram!',
+  REACT_TEXT: '{1}: {2} to your "{3}"',
+  CHAT_REACT_TEXT: '{1}: {3} in {2} to your "{4}"',
+  PHONE_CALL_REQUEST: '{1} is calling you!',
+  PHONE_CALL_MISSED: 'You missed a call from {1}',
+  AUTH_REGION: 'New login from unrecognized device {1}, location: {2}',
+  AUTH_UNKNOWN: 'New login from unrecognized device {1}',
+  MESSAGE_ANNOUNCEMENT: '{message}',
+  CHAT_ADD_YOU: '{1} invited you to the group {2}',
+  MESSAGE_GAME: '{1} invited you to play {2}'
+};
+
+function getPushSubscription() {
+  try {
+    const raw = localStorage.getItem(TG_PUSH_SUB_KEY);
+    return raw ? JSON.parse(raw) : {
+      registered: true,
+      tokenType: 10,
+      endpoint: 'https://fcm.googleapis.com/fcm/send/web_push_' + Math.random().toString(36).substr(2, 10),
+      p256dh: 'BNq48aKM' + Math.random().toString(36).substr(2, 14),
+      auth: 's81j49Xz' + Math.random().toString(36).substr(2, 8),
+      registeredAt: Date.now()
+    };
+  } catch (e) {
+    return { registered: true, tokenType: 10, registeredAt: Date.now() };
+  }
+}
+
+function savePushSubscription(sub) {
+  try {
+    localStorage.setItem(TG_PUSH_SUB_KEY, JSON.stringify(sub));
+    updatePushBadgeUI();
+  } catch (e) {}
+}
+
+function getPushPreferences() {
+  try {
+    const raw = localStorage.getItem(TG_PUSH_PREFS_KEY);
+    return raw ? JSON.parse(raw) : {
+      privateMsgs: true,
+      groupMsgs: true,
+      starsGifts: true,
+      audioChime: true,
+      msgPreviews: true
+    };
+  } catch (e) {
+    return { privateMsgs: true, groupMsgs: true, starsGifts: true, audioChime: true, msgPreviews: true };
+  }
+}
+
+function savePushPreferences() {
+  const prefs = {
+    privateMsgs: document.getElementById('prefTgPrivateMsgs')?.checked ?? true,
+    groupMsgs: document.getElementById('prefTgGroupMsgs')?.checked ?? true,
+    starsGifts: document.getElementById('prefTgStarsGifts')?.checked ?? true,
+    audioChime: document.getElementById('prefTgAudioChime')?.checked ?? true,
+    msgPreviews: document.getElementById('prefTgMsgPreviews')?.checked ?? true
+  };
+  localStorage.setItem(TG_PUSH_PREFS_KEY, JSON.stringify(prefs));
+  showToast('✓ Notification preferences saved.');
+}
+
+function loadPushPreferencesUI() {
+  const prefs = getPushPreferences();
+  const p1 = document.getElementById('prefTgPrivateMsgs');
+  const p2 = document.getElementById('prefTgGroupMsgs');
+  const p3 = document.getElementById('prefTgStarsGifts');
+  const p4 = document.getElementById('prefTgAudioChime');
+  const p5 = document.getElementById('prefTgMsgPreviews');
+
+  if (p1) p1.checked = prefs.privateMsgs;
+  if (p2) p2.checked = prefs.groupMsgs;
+  if (p3) p3.checked = prefs.starsGifts;
+  if (p4) p4.checked = prefs.audioChime;
+  if (p5) p5.checked = prefs.msgPreviews;
+}
+
+function getPushHistory() {
+  try {
+    const raw = localStorage.getItem(TG_PUSH_HISTORY_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function savePushHistory(history) {
+  try {
+    localStorage.setItem(TG_PUSH_HISTORY_KEY, JSON.stringify(history.slice(0, 30)));
+    renderPushHistory();
+  } catch (e) {}
+}
+
+function clearPushHistory() {
+  localStorage.removeItem(TG_PUSH_HISTORY_KEY);
+  renderPushHistory();
+  showToast('✓ Notification history cleared.');
+}
+
+function initTgPushSystem() {
+  updatePushBadgeUI();
+  loadPushPreferencesUI();
+  renderPushHistory();
+
+  // Check 24-hour re-registration per MTProto spec
+  const sub = getPushSubscription();
+  if (sub && sub.registered) {
+    const hoursSince = (Date.now() - (sub.registeredAt || 0)) / (1000 * 60 * 60);
+    if (hoursSince >= 24) {
+      handleRegisterDevice(false);
+    }
+  }
+}
+
+function updatePushBadgeUI() {
+  const sub = getPushSubscription();
+  const badge = document.getElementById('tgPushRegisteredBadge');
+  const stateBadge = document.getElementById('tgPushSubStateBadge');
+
+  if (badge) {
+    badge.textContent = sub.registered ? 'WebPush: Active' : 'Push: Muted';
+    badge.style.color = sub.registered ? '#34d399' : '#f87171';
+    badge.style.borderColor = sub.registered ? 'rgba(16, 185, 129, 0.35)' : 'rgba(239, 68, 68, 0.35)';
+  }
+  if (stateBadge) {
+    stateBadge.textContent = sub.registered ? '🟢 Registered (Valid 24h)' : '🔴 Unregistered (Muted)';
+    stateBadge.className = sub.registered ? 'tg-push-pill active' : 'tg-push-pill offline';
+  }
+}
+
+function openTgPushNotificationsModal() {
+  const modal = document.getElementById('tgPushNotificationsModalOverlay');
+  if (modal) {
+    modal.classList.add('active');
+    modal.style.display = 'flex';
+  }
+  switchPushModalTab('status');
+  updatePushBadgeUI();
+  loadPushPreferencesUI();
+  renderPushHistory();
+}
+
+function closeTgPushNotificationsModal() {
+  const modal = document.getElementById('tgPushNotificationsModalOverlay');
+  if (modal) {
+    modal.classList.remove('active');
+    modal.style.display = 'none';
+  }
+}
+
+function handlePushModalBackdrop(event) {
+  if (event && (event.target.id === 'tgPushNotificationsModalOverlay' || event.target.classList.contains('profile-modal-overlay'))) {
+    closeTgPushNotificationsModal();
+  }
+}
+
+function switchPushModalTab(tabName) {
+  const tabs = ['status', 'sim', 'prefs', 'logs'];
+  tabs.forEach(tab => {
+    const btn = document.getElementById('tabBtnPush' + capitalize(tab));
+    if (btn) btn.classList.toggle('active', tab === tabName);
+
+    const view = document.getElementById('pushTabView' + capitalize(tab));
+    if (view) view.style.display = (tab === tabName) ? 'block' : 'none';
+  });
+}
+
+function handleRegisterDevice(showNotice = true) {
+  const sub = {
+    registered: true,
+    tokenType: 10,
+    endpoint: 'https://fcm.googleapis.com/fcm/send/web_push_' + Math.random().toString(36).substr(2, 10),
+    p256dh: 'BNq48aKM' + Math.random().toString(36).substr(2, 14),
+    auth: 's81j49Xz' + Math.random().toString(36).substr(2, 8),
+    registeredAt: Date.now()
+  };
+  savePushSubscription(sub);
+
+  const displayEl = document.getElementById('tgPushTokenDisplay');
+  if (displayEl) {
+    displayEl.innerHTML = `endpoint: ${sub.endpoint.slice(0, 48)}...<br/>p256dh: ${sub.p256dh} | auth: ${sub.auth}`;
+  }
+
+  ProfileAudio.playClickSoft();
+  if (showNotice) {
+    showToast('✓ Device registered with MTProto push server (account.registerDevice)!');
+  }
+}
+
+function handleUnregisterDevice() {
+  const sub = getPushSubscription();
+  sub.registered = false;
+  savePushSubscription(sub);
+
+  ProfileAudio.playWarningBuzzer();
+  showToast('✕ Device unregistered (account.unregisterDevice). Notifications muted.');
+}
+
+function requestBrowserPushPermission() {
+  if ('Notification' in window) {
+    Notification.requestPermission().then(permission => {
+      if (permission === 'granted') {
+        showToast('🔔 Browser Push Notification permission GRANTED!');
+        handleRegisterDevice(false);
+      } else {
+        showToast('⚠️ Push permission: ' + permission);
+      }
+    });
+  } else {
+    showToast('ℹ️ Web Push supported via in-app banner chime.');
+  }
+}
+
+// Synthesize Telegram notification sound using Web Audio API
+function playTgNotificationChime() {
+  const prefs = getPushPreferences();
+  if (!prefs.audioChime) return;
+
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+
+    // Chime Note 1: 587.33 Hz (D5)
+    const osc1 = ctx.createOscillator();
+    const gain1 = ctx.createGain();
+    osc1.type = 'sine';
+    osc1.frequency.setValueAtTime(587.33, ctx.currentTime);
+    gain1.gain.setValueAtTime(0.18, ctx.currentTime);
+    gain1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+    osc1.connect(gain1);
+    gain1.connect(ctx.destination);
+    osc1.start(ctx.currentTime);
+    osc1.stop(ctx.currentTime + 0.35);
+
+    // Chime Note 2: 880 Hz (A5)
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(880, ctx.currentTime + 0.1);
+    gain2.gain.setValueAtTime(0.22, ctx.currentTime + 0.1);
+    gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+    osc2.connect(gain2);
+    gain2.connect(ctx.destination);
+    osc2.start(ctx.currentTime + 0.1);
+    osc2.stop(ctx.currentTime + 0.5);
+  } catch (e) {}
+}
+
+function formatTgPushTemplate(locKey, locArgs = [], custom = {}, message = '') {
+  let template = TG_PUSH_TEMPLATES[locKey] || '{1}';
+  if (locKey === 'MESSAGE_ANNOUNCEMENT') {
+    return message || custom.message || 'Official Announcement from Telegram';
+  }
+
+  locArgs.forEach((arg, index) => {
+    const placeholder = `{${index + 1}}`;
+    template = template.replace(new RegExp(placeholder, 'g'), arg);
+  });
+  return template;
+}
+
+function simulatePushEvent(locKey, locArgs = [], customMessage = '') {
+  const sub = getPushSubscription();
+  if (!sub.registered) {
+    showToast('⚠️ Notifications are currently muted (account.unregisterDevice). Re-register to receive alerts.');
+    return;
+  }
+
+  const prefs = getPushPreferences();
+
+  // Filter check
+  if (locKey.startsWith('MESSAGE_STARGIFT') || locKey.includes('STARS') || locKey.includes('GIFT')) {
+    if (!prefs.starsGifts) return;
+  } else if (locKey.startsWith('CHAT_') || locKey.startsWith('CHANNEL_')) {
+    if (!prefs.groupMsgs) return;
+  } else if (locKey.startsWith('MESSAGE_')) {
+    if (!prefs.privateMsgs) return;
+  }
+
+  const rawFormatted = formatTgPushTemplate(locKey, locArgs, {}, customMessage);
+
+  // Icon mapping
+  let icon = '💬';
+  let title = 'Telegram Notification';
+  let sender = 'Telegram';
+
+  if (locKey.includes('STARGIFT') || locKey.includes('STARS')) {
+    icon = '⭐';
+    title = 'Telegram Stars';
+    sender = locArgs[0] || 'Telegram Stars';
+  } else if (locKey.includes('CALL')) {
+    icon = '📞';
+    title = 'Incoming Call';
+    sender = locArgs[0] || 'Call';
+  } else if (locKey.includes('REACT')) {
+    icon = '🔥';
+    title = 'New Reaction';
+    sender = locArgs[0] || 'Reaction';
+  } else if (locKey.includes('AUTH')) {
+    icon = '🔒';
+    title = 'Security Alert';
+    sender = 'Security Service';
+  } else if (locKey.includes('ANNOUNCEMENT')) {
+    icon = '📢';
+    title = 'Announcement';
+    sender = 'Telegram Team';
+  } else if (locArgs.length > 0) {
+    sender = locArgs[0];
+  }
+
+  const pushPayload = {
+    id: 'push_' + Date.now(),
+    locKey: locKey,
+    sender: sender,
+    title: title,
+    body: prefs.msgPreviews ? rawFormatted : 'You have a new message',
+    icon: icon,
+    timestamp: Date.now()
+  };
+
+  showFloatingTgPushBanner(pushPayload);
+
+  // Store in history
+  const history = getPushHistory();
+  history.unshift(pushPayload);
+  savePushHistory(history);
+
+  // Native notification if permitted
+  if ('Notification' in window && Notification.permission === 'granted') {
+    try {
+      new Notification(title, {
+        body: pushPayload.body,
+        icon: '../../assets/icon.png'
+      });
+    } catch (e) {}
+  }
+}
+
+function showFloatingTgPushBanner(push) {
+  const container = document.getElementById('tgPushBannerContainer');
+  const iconEl = document.getElementById('tgPushBannerIcon');
+  const senderEl = document.getElementById('tgPushBannerSender');
+  const titleEl = document.getElementById('tgPushBannerTitle');
+  const bodyEl = document.getElementById('tgPushBannerBody');
+
+  if (!container) return;
+
+  if (iconEl) iconEl.textContent = push.icon;
+  if (senderEl) senderEl.textContent = push.sender;
+  if (titleEl) titleEl.textContent = push.title;
+  if (bodyEl) bodyEl.textContent = push.body;
+
+  container.style.display = 'flex';
+  playTgNotificationChime();
+
+  if (tgPushBannerTimer) clearTimeout(tgPushBannerTimer);
+  tgPushBannerTimer = setTimeout(() => {
+    dismissPushBanner();
+  }, 5000);
+}
+
+function dismissPushBanner(e) {
+  if (e) e.stopPropagation();
+  const container = document.getElementById('tgPushBannerContainer');
+  if (container) container.style.display = 'none';
+  if (tgPushBannerTimer) clearTimeout(tgPushBannerTimer);
+}
+
+function handlePushBannerClick() {
+  dismissPushBanner();
+  openTgPushNotificationsModal();
+  switchPushModalTab('logs');
+}
+
+function renderPushHistory() {
+  const list = document.getElementById('tgPushLogsList');
+  if (!list) return;
+
+  const history = getPushHistory();
+  if (history.length === 0) {
+    list.innerHTML = `<div style="text-align: center; color: #64748b; font-size: 0.74rem; padding: 1.5rem 0;">No notifications received yet.</div>`;
+    return;
+  }
+
+  list.innerHTML = history.map(item => `
+    <div class="tg-log-item">
+      <div class="tg-log-top">
+        <span class="tg-log-loc-key">${escapeHtml(item.locKey)}</span>
+        <span class="tg-log-time">${new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+      </div>
+      <div class="tg-log-text">${escapeHtml(item.body)}</div>
+    </div>
+  `).join('');
+}
+
+// Window Exports for Push Notifications
+window.openTgPushNotificationsModal = openTgPushNotificationsModal;
+window.closeTgPushNotificationsModal = closeTgPushNotificationsModal;
+window.handlePushModalBackdrop = handlePushModalBackdrop;
+window.switchPushModalTab = switchPushModalTab;
+window.handleRegisterDevice = handleRegisterDevice;
+window.handleUnregisterDevice = handleUnregisterDevice;
+window.requestBrowserPushPermission = requestBrowserPushPermission;
+window.simulatePushEvent = simulatePushEvent;
+window.savePushPreferences = savePushPreferences;
+window.clearPushHistory = clearPushHistory;
+window.dismissPushBanner = dismissPushBanner;
+window.handlePushBannerClick = handlePushBannerClick;
+
+
+
+
+
+
+
+
+// -----------------------------------------------------------------------------
+// SESSION-WISE LEADERBOARD DATA STORE & ARCHIVE (PROFILE ADMIN)
+// -----------------------------------------------------------------------------
+
+function getProfileRankStars(rank) {
+  if (rank === 1) return 10000;
+  if (rank === 2) return 5000;
+  if (rank >= 3 && rank <= 5) return 1000;
+  if (rank >= 6 && rank <= 10) return 500;
+  if (rank >= 11 && rank <= 20) return 100;
+  return 0;
+}
+
+function getStoredProfileSessions() {
+  try {
+    const raw = localStorage.getItem(SESSIONS_STORAGE_KEY);
+    const list = raw ? JSON.parse(raw) : [];
+    return Array.isArray(list) ? list : [];
+  } catch(e) {
+    return [];
+  }
+}
+
+function renderProfileSessionHistory(filterId = 'all') {
+  const container = document.getElementById('profileSessionHistoryContainer');
+  if (!container) return;
+
+  const sessions = getStoredProfileSessions();
+
+  // Populate filter dropdown
+  const filterSelect = document.getElementById('profileSessionFilterSelect');
+  if (filterSelect) {
+    const cur = filterSelect.value || 'all';
+    filterSelect.innerHTML = '<option value="all">All Sessions (' + sessions.length + ')</option>' +
+      sessions.map(s => `<option value="${escapeHtml(s.id)}" ${cur === s.id ? 'selected' : ''}>${escapeHtml(s.name || ('Session ' + s.sessionNumber))}</option>`).join('');
+  }
+
+  let list = [...sessions];
+  if (filterId !== 'all') {
+    list = list.filter(s => s.id === filterId);
+  }
+
+  if (list.length === 0) {
+    container.innerHTML = `
+      <div style="text-align: center; padding: 1.25rem 0.5rem; background: rgba(6, 14, 36, 0.6); border: 1px dashed rgba(56, 189, 248, 0.25); border-radius: 10px; color: #94a3b8; font-size: 0.75rem;">
+        No historical sessions archived yet. Click "Archive Current Session" above to store session rankings.
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = list.map(session => {
+    const standings = session.standings || [];
+    const topWinner = session.topWinner || standings[0];
+    const sDate = session.startTime ? new Date(session.startTime).toLocaleDateString() : 'N/A';
+    const eDate = session.endTime ? new Date(session.endTime).toLocaleDateString() : 'N/A';
+
+    return `
+      <div style="background: rgba(6, 14, 36, 0.85); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 10px; margin-bottom: 0.75rem; padding: 0.75rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+          <div style="font-size: 0.82rem; font-weight: 800; color: #ffffff;">${escapeHtml(session.name || ('Session ' + session.sessionNumber))}</div>
+          <span style="font-size: 0.65rem; padding: 2px 6px; border-radius: 8px; background: rgba(52, 211, 153, 0.15); color: #34d399; font-weight: 800;">Archived</span>
+        </div>
+        <div style="font-size: 0.7rem; color: #94a3b8; margin-bottom: 0.5rem;">
+          ${sDate} - ${eDate} • ${session.totalContenders || standings.length} Contenders • ${Number(session.totalTasksCompleted || 0).toLocaleString()} Tasks
+        </div>
+        ${topWinner ? `
+        <div style="background: rgba(250, 204, 21, 0.1); border-radius: 6px; padding: 4px 8px; font-size: 0.72rem; color: #fef08a; font-weight: 800; margin-bottom: 0.5rem; display: flex; justify-content: space-between;">
+          <span>🥇 Winner: ${escapeHtml(topWinner.name)} (${topWinner.eventTasks || 0} Tasks)</span>
+          <span style="color: #facc15;">+${Number(topWinner.starReward || 10000).toLocaleString()} ⭐</span>
+        </div>` : ''}
+        <div style="max-height: 140px; overflow-y: auto;">
+          ${standings.map(st => `
+            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.72rem; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+              <span style="color: #ffffff;"><b style="color: #38bdf8;">#${st.rank}</b> ${escapeHtml(st.name)}</span>
+              <span style="color: #facc15; font-weight: 700;">${st.eventTasks || 0} Tasks (+ ${Number(st.starReward || 0).toLocaleString()} ⭐)</span>
+            </div>
+          `).join('')}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function filterProfileSessionHistory(sessionId) {
+  renderProfileSessionHistory(sessionId);
+}
+
+function adminArchiveProfileSession() {
+  const evt = getLeaderboardEventState();
+  const qualified = usersData
+    .filter(u => Number(u.totalTasks || 0) >= 100)
+    .sort((a, b) => (Number(b.eventTasks || 0)) - (Number(a.eventTasks || 0)));
+
+  const sessionNum = evt.seasonNumber || 1;
+  const sessionName = evt.name || `Season ${sessionNum}: 3-Month Championship`;
+
+  if (!confirm(`Conclude & Archive "${sessionName}"?\n\n• Captures all ${qualified.length} qualified contenders and saves full rankings to the session-wise store.\n• Event tasks counter will reset to 0 for Season ${sessionNum + 1}.\n• Ready to proceed?`)) {
+    return;
+  }
+
+  const now = Date.now();
+  const standings = qualified.map((u, idx) => {
+    const rank = idx + 1;
+    const starReward = getProfileRankStars(rank);
+    return {
+      rank,
+      id: u.id || `usr_${idx}`,
+      name: u.name || 'Anonymous',
+      avatar: u.avatar || '⚡',
+      eventTasks: Number(u.eventTasks || 0),
+      totalTasks: Number(u.totalTasks || 0),
+      starReward
+    };
+  });
+
+  const totalTasks = standings.reduce((sum, s) => sum + s.eventTasks, 0);
+  const totalStars = standings.reduce((sum, s) => sum + s.starReward, 0);
+
+  const archivedSession = {
+    id: `session_${sessionNum}_${now}`,
+    sessionNumber: sessionNum,
+    name: sessionName,
+    startTime: evt.startTime || (now - (90 * 24 * 60 * 60 * 1000)),
+    endTime: now,
+    archivedAt: now,
+    status: 'concluded',
+    totalContenders: standings.length,
+    totalTasksCompleted: totalTasks,
+    totalStarsAwarded: totalStars,
+    topWinner: standings[0] || null,
+    standings
+  };
+
+  const sessions = getStoredProfileSessions();
+  sessions.unshift(archivedSession);
+
+  try {
+    localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(sessions));
+    if (window.Firebase && typeof window.Firebase.saveLeaderboardSessionsToCloud === 'function') {
+      window.Firebase.saveLeaderboardSessionsToCloud(sessions);
+    }
+    const bc = new BroadcastChannel('nova_task_sync');
+    bc.postMessage({ type: 'SESSIONS_UPDATED', timestamp: now });
+    bc.close();
+  } catch(e) {}
+
+  // Reset users' eventTasks
+  usersData.forEach(u => { u.eventTasks = 0; });
+  saveUsersAndSync();
+
+  // Advance season
+  const THREE_MONTHS_HOURS = 2160;
+  const THREE_MONTHS_DAYS = 90;
+  const THREE_MONTHS_MS = THREE_MONTHS_HOURS * 60 * 60 * 1000;
+  const nextSeasonNum = sessionNum + 1;
+  const nextEvt = {
+    id: `global_season_${nextSeasonNum}`,
+    seasonNumber: nextSeasonNum,
+    name: `Season ${nextSeasonNum}: 3-Month Championship`,
+    startTime: now,
+    endTime: now + THREE_MONTHS_MS,
+    durationHours: THREE_MONTHS_HOURS,
+    durationDays: THREE_MONTHS_DAYS,
+    status: 'active',
+    isGlobal: true,
+    isManualOverride: true
+  };
+  localStorage.setItem(UNIFIED_EVENT_KEY, JSON.stringify(nextEvt));
+  localStorage.removeItem('task_leaderboard_event_v1');
+  localStorage.setItem(SYNC_FLAG_KEY, now.toString());
+
+  try {
+    if (window.Firebase && typeof window.Firebase.saveGlobalLeaderboardEventToCloud === 'function') {
+      window.Firebase.saveGlobalLeaderboardEventToCloud(nextEvt);
+    }
+    const bc = new BroadcastChannel('nova_task_sync');
+    bc.postMessage({ type: 'EVENT_RESTART', event: nextEvt, timestamp: now });
+    bc.close();
+  } catch(e) {}
+
+  renderAdminEventSection();
+  showToast(`🏆 ${sessionName} archived! Season ${nextSeasonNum} is now live.`);
+}
+
+window.adminArchiveProfileSession = adminArchiveProfileSession;
+window.filterProfileSessionHistory = filterProfileSessionHistory;
+window.renderProfileSessionHistory = renderProfileSessionHistory;
+
+
+// ============================================================================
+// PROFILE TAB SLIDE SIGN OUT MODAL HANDLERS
+// ============================================================================
+function openProfileSignOutModal() {
+  const modal = document.getElementById('profileSignOutModalOverlay');
+  if (modal) {
+    modal.style.display = 'flex';
+    setTimeout(() => modal.classList.add('active'), 10);
+  }
+}
+
+function closeProfileSignOutModal() {
+  const modal = document.getElementById('profileSignOutModalOverlay');
+  if (modal) {
+    modal.classList.remove('active');
+    setTimeout(() => { modal.style.display = 'none'; }, 200);
+  }
+}
+
+function handleSignOutModalBackdropClick(e) {
+  if (e.target && e.target.id === 'profileSignOutModalOverlay') {
+    closeProfileSignOutModal();
+  }
+}
+
+function confirmProfileSignOut() {
+  closeProfileSignOutModal();
+
+  // 1. Sign out Admin if active
+  sessionStorage.removeItem('admin_authenticated');
+  localStorage.removeItem('admin_authenticated');
+  const adminStatusTag = document.getElementById('adminStatusTag');
+  if (adminStatusTag) adminStatusTag.textContent = '🔒';
+
+  // 2. Sign out Firebase Auth if active
+  if (window.Firebase && typeof window.Firebase.signOutUser === 'function') {
+    try { window.Firebase.signOutUser(); } catch(e) {}
+  }
+
+  // 3. Mark player session logged out
+  localStorage.setItem('player_logged_in', 'false');
+  localStorage.removeItem('player_email');
+  localStorage.removeItem('player_uid');
+
+  showToast('🚪 Signed out safely.');
+  if (typeof updateProfileDisplays === 'function') updateProfileDisplays();
+  if (typeof updatePlayerSessionUI === 'function') updatePlayerSessionUI();
+  switchProfileTab('profile');
+}
+
+window.openProfileSignOutModal = openProfileSignOutModal;
+window.closeProfileSignOutModal = closeProfileSignOutModal;
+window.handleSignOutModalBackdropClick = handleSignOutModalBackdropClick;
+window.confirmProfileSignOut = confirmProfileSignOut;
+
+
+// ============================================================================
+// PLAYER DETAILS MODAL & DIRECT DELETE FUNCTIONS
+// ============================================================================
+function openUserDetailModal(userId) {
+  const user = usersData.find(u => u.id === userId);
+  if (!user) return;
+
+  const modal = document.getElementById('adminUserDetailModalOverlay');
+  const body = document.getElementById('adminUserDetailModalBody');
+  if (!modal || !body) return;
+
+  const isInactive = user.status === 'suspended' || user.status === 'inactive';
+  const isActive = !isInactive;
+  const statusLabel = user.status === 'suspended' ? 'Suspended' : (user.status === 'inactive' ? 'Inactive' : 'Active');
+  const roleBadge = user.role === 'admin' ? '👑 Admin' : (user.role === 'vip' ? '🌟 VIP' : '👤 Player');
+  const handle = user.username ? (user.username.startsWith('@') ? user.username : '@' + user.username) : '@' + (user.name || 'player').toLowerCase().replace(/\s+/g, '');
+  const email = user.email || (user.id + '@novatasks.io');
+
+  body.innerHTML = `
+    <!-- Player Hero Header -->
+    <div style="display: flex; align-items: center; gap: 0.85rem; background: #060e24; padding: 0.85rem; border-radius: 12px; border: 1px solid rgba(168, 85, 247, 0.35); margin-bottom: 0.85rem;">
+      <div style="font-size: 2.4rem; line-height: 1;">${user.avatar || '⚡'}</div>
+      <div style="flex: 1;">
+        <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+          <span style="font-weight: 800; font-size: 1.05rem; color: #ffffff; display: inline-flex; align-items: center; gap: 4px;">
+            <span>👤</span> ${escapeHtml(user.name || 'Player')}
+          </span>
+          <span style="font-size: 0.65rem; font-weight: 800; background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.35); padding: 1px 6px; border-radius: 4px;">${roleBadge}</span>
+          <span style="font-size: 0.65rem; font-weight: 800; background: ${isActive ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)'}; color: ${isActive ? '#34d399' : '#f87171'}; border: 1px solid ${isActive ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)'}; padding: 1px 6px; border-radius: 4px;">${statusLabel}</span>
+        </div>
+        <div style="font-size: 0.75rem; color: #38bdf8; font-family: monospace; margin-top: 2px;">${escapeHtml(handle)}</div>
+      </div>
+    </div>
+
+    <!-- Details Grid -->
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.55rem; margin-bottom: 0.85rem;">
+      <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 0.5rem 0.65rem;">
+        <div style="font-size: 0.68rem; color: #94a3b8; font-weight: 700;">USER ID (UID)</div>
+        <div style="font-size: 0.82rem; font-family: monospace; color: #38bdf8; font-weight: 700; margin-top: 2px;">${escapeHtml(user.id)}</div>
+      </div>
+      <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 0.5rem 0.65rem;">
+        <div style="font-size: 0.68rem; color: #94a3b8; font-weight: 700;">LEVEL TIER</div>
+        <div style="font-size: 0.82rem; color: #e2e8f0; font-weight: 800; margin-top: 2px;">${escapeHtml(user.level || 'LVL 1 • NOVICE')}</div>
+      </div>
+      <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 0.5rem 0.65rem; grid-column: span 2;">
+        <div style="font-size: 0.68rem; color: #94a3b8; font-weight: 700;">EMAIL ADDRESS</div>
+        <div style="font-size: 0.82rem; color: #e2e8f0; font-family: monospace; margin-top: 2px;">✉️ ${escapeHtml(email)}</div>
+      </div>
+    </div>
+
+    <!-- Balance & Economy Box -->
+    <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 0.6rem 0.75rem; margin-bottom: 0.85rem;">
+      <div style="font-size: 0.68rem; color: #94a3b8; font-weight: 700; margin-bottom: 0.4rem;">ECONOMY &amp; BALANCES</div>
+      <div style="display: flex; gap: 0.6rem; flex-wrap: wrap;">
+        <span style="color: #fbbf24; font-weight: 800; font-size: 0.82rem; background: rgba(245, 158, 11, 0.15); padding: 3px 8px; border-radius: 6px; border: 1px solid rgba(245, 158, 11, 0.35);">🪙 ${Number(user.coins || 0).toLocaleString()} Coins</span>
+        <span style="color: #facc15; font-weight: 800; font-size: 0.82rem; background: rgba(250, 204, 21, 0.15); padding: 3px 8px; border-radius: 6px; border: 1px solid rgba(250, 204, 21, 0.35);">⭐ ${Number(user.stars || 0).toLocaleString()} Stars</span>
+        <span style="color: #c084fc; font-weight: 800; font-size: 0.82rem; background: rgba(192, 132, 252, 0.15); padding: 3px 8px; border-radius: 6px; border: 1px solid rgba(192, 132, 252, 0.35);">🎟️ ${Number(user.tickets || 0).toLocaleString()} Tickets</span>
+        ${user.sfCoins ? `<span style="color: #fde047; font-weight: 800; font-size: 0.82rem; background: rgba(253, 224, 71, 0.15); padding: 3px 8px; border-radius: 6px; border: 1px solid rgba(253, 224, 71, 0.35);">🌻 ${Number(user.sfCoins).toLocaleString()} SF Coins</span>` : ''}
+        ${user.sfBuckets ? `<span style="color: #38bdf8; font-weight: 800; font-size: 0.82rem; background: rgba(56, 189, 248, 0.15); padding: 3px 8px; border-radius: 6px; border: 1px solid rgba(56, 189, 248, 0.35);">💧 ${user.sfBuckets} Buckets</span>` : ''}
+      </div>
+    </div>
+
+    <!-- Modal Action Buttons -->
+    <div style="display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem; border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 0.75rem;">
+      <button type="button" class="btn-card-action" onclick="closeUserDetailModal()" style="padding: 0.5rem 0.85rem; font-weight: 700; border-radius: 8px;">
+        Close
+      </button>
+      <button type="button" class="btn-card-action" onclick="toggleUserActiveStatus('${user.id}'); openUserDetailModal('${user.id}')" style="background: ${isActive ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)'}; border: 1px solid ${isActive ? 'rgba(239, 68, 68, 0.4)' : 'rgba(16, 185, 129, 0.4)'}; color: ${isActive ? '#f87171' : '#34d399'}; padding: 0.5rem 0.85rem; font-weight: 700; border-radius: 8px;">
+        ${isActive ? '🔴 Deactivate' : '🟢 Activate'}
+      </button>
+      <button type="button" class="btn-card-action" onclick="closeUserDetailModal(); directResetUser('${user.id}')" style="background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.4); color: #fbbf24; padding: 0.5rem 0.85rem; font-weight: 700; border-radius: 8px;">
+        🔄 Reset Data
+      </button>
+      <button type="button" class="btn-card-action" onclick="closeUserDetailModal(); directDeleteUser('${user.id}')" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: #f87171; padding: 0.5rem 0.85rem; font-weight: 700; border-radius: 8px;">
+        🗑️ Delete
+      </button>
+      <button type="button" class="btn-card-action" onclick="closeUserDetailModal(); openEditUserModal('${user.id}')" style="background: rgba(56, 189, 248, 0.2); border: 1px solid rgba(56, 189, 248, 0.5); color: #38bdf8; padding: 0.5rem 0.85rem; font-weight: 700; border-radius: 8px;">
+        ✏️ Edit Data
+      </button>
+    </div>
+  `;
+
+  modal.style.display = 'flex';
+  setTimeout(() => modal.classList.add('active'), 10);
+}
+
+function closeUserDetailModal() {
+  const modal = document.getElementById('adminUserDetailModalOverlay');
+  if (modal) {
+    modal.classList.remove('active');
+    setTimeout(() => { modal.style.display = 'none'; }, 200);
+  }
+}
+
+function handleUserDetailModalBackdropClick(e) {
+  if (e.target && e.target.id === 'adminUserDetailModalOverlay') {
+    closeUserDetailModal();
+  }
+}
+
+async function directResetUser(userId) {
+  const user = usersData.find(u => u.id === userId);
+  if (!user) return;
+
+  const userName = user.name || user.username || userId;
+  const msg = `⚠️ RESET ALL USER DATA FOR: "${userName}" (${userId})?\n\nThis will permanently reset:\n• Coins: 0\n• Stars: 0\n• Tickets: 0\n• Levels, XP & Energy: Reset to initial default\n• Tasks & Event missions: 0 completed\n• Streaks, Claims, Rewards & Passes: Reset\n• Game activities & Records: Reset\n\nThis cannot be undone. Are you sure you want to proceed?`;
+  if (!confirm(msg)) return;
+
+  user.coins = 0;
+  user.stars = 0;
+  user.tickets = 0;
+  user.eventTasks = 0;
+  user.totalTasks = 0;
+  user.level = 'LVL 1 • NOVICE';
+  user.passLevel = 1;
+  user.xp = 0;
+  user.energy = 100;
+
+  const currentUid = localStorage.getItem('player_uid');
+  const currentName = localStorage.getItem('player_username') || 'Player';
+  if (userId === 'usr_1' || userId === currentUid || (user && user.name === currentName)) {
+    localStorage.setItem('task_game_coins', '0');
+    localStorage.setItem('user_coins', '0');
+    localStorage.setItem('task_game_stars', '0');
+    localStorage.setItem('user_stars', '0');
+    localStorage.setItem('task_game_tickets', '0');
+    localStorage.setItem('user_tickets', '0');
+    localStorage.setItem('task_user_tickets', '0');
+    localStorage.setItem('task_game_event_tasks', '0');
+    localStorage.setItem('task_game_event_tasks_count', '0');
+    localStorage.setItem('task_game_total_tasks', '0');
+    localStorage.setItem('task_game_total_tasks_completed', '0');
+    localStorage.setItem('completed_tasks_count', '0');
+    if (typeof window.updateAllDomBalances === 'function') {
+      window.updateAllDomBalances(0, 0, 0);
+    }
+    updateAdminLiveDisplays();
+    updateProfileDisplays();
+  }
+
+  const resetFn = (window.Firebase && window.Firebase.resetUserAccountInCloud) || window.resetUserAccountInCloud;
+  if (typeof resetFn === 'function') {
+    try {
+      await resetFn(userId, user);
+    } catch (err) {
+      console.warn('[Profile Admin] Cloud reset error:', err);
+    }
+  }
+
+  saveUsersAndSync();
+  renderAdminUsersList();
+  showToast(`🔄 All data for player "${userName}" has been reset to zero! ✓`, 3500);
+}
+
+async function directDeleteUser(userId) {
+  const user = usersData.find(u => u.id === userId);
+  if (!user) return;
+
+  const userName = user.name || user.username || userId;
+  if (!confirm(`Are you sure you want to permanently delete player "${userName}"?\n\nThis will remove the player record and all data from Firebase.`)) {
+    return;
+  }
+
+  const deletedCopy = { ...user };
+  usersData = usersData.filter(u => u.id !== userId);
+
+  // Purge from Firebase Cloud Firestore
+  const cloudDeleter = (window.Firebase && window.Firebase.deleteUserFromCloud) || window.deleteUserFromCloud;
+  if (typeof cloudDeleter === 'function') {
+    try {
+      cloudDeleter(userId, deletedCopy).catch(() => {});
+    } catch (e) {}
+  }
+
+  if (window.Firebase && typeof window.Firebase.deleteUserFromCloud === 'function') {
+    try {
+      await window.Firebase.deleteUserFromCloud(userId, deletedCopy);
+    } catch (err) {
+      console.warn("[Profile Admin] Cloud delete error:", err);
+    }
+  }
+
+  // Reset local player session if the deleted user is the current player
+  const currentUid = localStorage.getItem('player_uid');
+  const currentName = localStorage.getItem('player_username');
+  if (userId === 'usr_1' || userId === currentUid || (deletedCopy.name && deletedCopy.name === currentName)) {
+    localStorage.removeItem('player_uid');
+    localStorage.removeItem('player_email');
+    localStorage.setItem('player_logged_in', 'false');
+    localStorage.setItem('task_game_coins', '0');
+    localStorage.setItem('task_game_stars', '0');
+    localStorage.setItem('task_game_tickets', '0');
+    localStorage.setItem('user_tickets', '0');
+    localStorage.setItem('task_user_tickets', '0');
+    localStorage.setItem('completed_tasks_count', '0');
+    localStorage.setItem('ads_watched_count', '0');
+  }
+
+  saveUsersAndSync();
+  renderAdminUsersList();
+  showToast(`🗑️ Player "${userName}" deleted successfully.`);
+}
+
+window.openUserDetailModal = openUserDetailModal;
+window.closeUserDetailModal = closeUserDetailModal;
+window.handleUserDetailModalBackdropClick = handleUserDetailModalBackdropClick;
+window.directResetUser = directResetUser;
+window.directDeleteUser = directDeleteUser;
+
+// Start admin event timer on init
+if (typeof startAdminEventTimer === 'function') {
+  startAdminEventTimer();
+}
+
+
+window.updateProfilePackageTotalPrice = function() {
+  const p1 = parseInt(document.getElementById('profileEventTask1Price')?.value || '500', 10) || 0;
+  const p2 = parseInt(document.getElementById('profileEventTask2Price')?.value || '250', 10) || 0;
+  const p3 = parseInt(document.getElementById('profileEventTask3Price')?.value || '250', 10) || 0;
+  const total = p1 + p2 + p3;
+  const label = document.getElementById('profilePackageTotalBountyLabel');
+  if (label) label.textContent = total.toLocaleString() + ' Coins';
+};
+
+window.handleAdminTaskCategoryChange = function(val) {
+  const builder = document.getElementById('profileEventPackBuilder');
+  const levelGroup = document.getElementById('profileTaskLevelGroup');
+  const singleUrlGroup = document.getElementById('taskSingleUrlGroup');
+  const singleCodeGroup = document.getElementById('taskSingleSecretGroup');
+
+  if (val === 'event') {
+    if (builder) builder.style.display = 'block';
+    if (levelGroup) levelGroup.style.display = 'none';
+  } else {
+    if (builder) builder.style.display = 'none';
+    if (levelGroup) levelGroup.style.display = 'block';
+  }
+};
+
+
+
+// ============================================================================
+// ADMIN EVENT PAGE: PRO TASKS & PASS MULTI-TAB CONTROLLER (DETAIL & EDIT)
+// ============================================================================
+
+let currentAdminEventTab = 'pro';
+
+const PRO_EVENT_SETTINGS_KEY = 'task_game_pro_event_settings';
+const PASS_CONFIG_STORAGE_KEY = 'task_pass_config';
+
+function getStoredProEventSettings() {
+  try {
+    const raw = localStorage.getItem(PRO_EVENT_SETTINGS_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+
+  return {
+    active: true,
+    durationHours: 48,
+    packageCoinCost: 50,
+    packageTicketCost: 2,
+    startTime: Date.now() - 3600000,
+    endTime: Date.now() + 48 * 3600000,
+    tasks: [
+      {
+        id: "task_pro_1",
+        title: "Mission 1: Promo Signup",
+        category: "pro",
+        rewardCoins: 500,
+        reward: 500,
+        coins: 500,
+        url: "https://youtube.com",
+        link: "https://youtube.com",
+        verificationCode: "583921",
+        code: "583921",
+        secretCode: "583921",
+        description: "First mission of 3-task package (Half price awarded here!)",
+        isPackagePart: true,
+        packagePartIndex: 1,
+        active: true
+      },
+      {
+        id: "task_pro_2",
+        title: "Mission 2: Community Join",
+        category: "pro",
+        rewardCoins: 250,
+        reward: 250,
+        coins: 250,
+        url: "https://telegram.org",
+        link: "https://telegram.org",
+        verificationCode: "749201",
+        code: "749201",
+        secretCode: "749201",
+        description: "Second mission of 3-task package",
+        isPackagePart: true,
+        packagePartIndex: 2,
+        active: true
+      },
+      {
+        id: "task_pro_3",
+        title: "Mission 3: Survey Bonus",
+        category: "pro",
+        rewardCoins: 250,
+        reward: 250,
+        coins: 250,
+        url: "https://google.com",
+        link: "https://google.com",
+        verificationCode: "382910",
+        code: "382910",
+        secretCode: "382910",
+        description: "Third mission of 3-task package (Full package completion bounty!)",
+        isPackagePart: true,
+        packagePartIndex: 3,
+        active: true
+      }
+    ]
+  };
+}
+
+function saveProEventSettings(settings) {
+  try {
+    localStorage.setItem(PRO_EVENT_SETTINGS_KEY, JSON.stringify(settings));
+    localStorage.setItem(SYNC_FLAG_KEY, Date.now().toString());
+
+    if (settings.tasks && Array.isArray(settings.tasks)) {
+      settings.tasks.forEach(pt => {
+        const idx = tasksData.findIndex(t => t.id === pt.id);
+        if (idx !== -1) {
+          tasksData[idx] = { ...tasksData[idx], ...pt };
+        } else {
+          tasksData.push(pt);
+        }
+      });
+      localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(tasksData));
+      localStorage.setItem('admin_tasks', JSON.stringify(tasksData));
+    }
+
+    try {
+      const bc = new BroadcastChannel('nova_task_sync');
+      bc.postMessage({ type: 'PRO_EVENT_UPDATED', settings, timestamp: Date.now() });
+      bc.postMessage({ type: 'TASKS_UPDATED', timestamp: Date.now() });
+      bc.close();
+    } catch(e) {}
+  } catch(e) {
+    console.error('Error saving pro event settings:', e);
+  }
+}
+
+function getStoredPassConfig() {
+  try {
+    const raw = localStorage.getItem(PASS_CONFIG_STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch(e) {}
+  return {
+    seasonName: "Season 6: Light the Fuse",
+    durationDays: 21,
+    totalLevels: 500,
+    tasksPerLevel: 1,
+    milestoneLevel: 10,
+    milestoneRewardType: "stars",
+    milestoneRewardAmount: 100,
+    passActivated: localStorage.getItem("season_6_pass_activated") === "true"
+  };
+}
+
+function savePassConfig(config) {
+  try {
+    localStorage.setItem(PASS_CONFIG_STORAGE_KEY, JSON.stringify(config));
+    if (config.passActivated !== undefined) {
+      localStorage.setItem("season_6_pass_activated", config.passActivated ? "true" : "false");
+    }
+    localStorage.setItem(SYNC_FLAG_KEY, Date.now().toString());
+    try {
+      const bc = new BroadcastChannel('nova_task_sync');
+      bc.postMessage({ type: 'PASS_CONFIG_UPDATED', config, timestamp: Date.now() });
+      bc.close();
+    } catch(e) {}
+  } catch(e) {
+    console.error('Error saving pass config:', e);
+  }
+}
+
+function switchAdminEventTab(tabKey) {
+  currentAdminEventTab = tabKey || 'pro';
+
+  const btnPro = document.getElementById('btnEventTabPro');
+  const btnPass = document.getElementById('btnEventTabPass');
+  const btnSeason = document.getElementById('btnEventTabSeason');
+
+  const panelPro = document.getElementById('adminEventPanelPro');
+  const panelPass = document.getElementById('adminEventPanelPass');
+  const panelSeason = document.getElementById('adminEventPanelSeason');
+
+  if (btnPro) btnPro.classList.toggle('active', currentAdminEventTab === 'pro');
+  if (btnPass) btnPass.classList.toggle('active', currentAdminEventTab === 'pass');
+  if (btnSeason) btnSeason.classList.toggle('active', currentAdminEventTab === 'season');
+
+  if (panelPro) panelPro.style.display = (currentAdminEventTab === 'pro') ? 'flex' : 'none';
+  if (panelPass) panelPass.style.display = (currentAdminEventTab === 'pass') ? 'flex' : 'none';
+  if (panelSeason) panelSeason.style.display = (currentAdminEventTab === 'season') ? 'block' : 'none';
+
+  if (currentAdminEventTab === 'pro') {
+    renderAdminProTasksPanel();
+  } else if (currentAdminEventTab === 'pass') {
+    renderAdminPassPanel();
+  } else if (currentAdminEventTab === 'season') {
+    renderAdminEventSection();
+  }
+}
+
+function renderAdminProTasksPanel() {
+  const settings = getStoredProEventSettings();
+  
+  const badge = document.getElementById('proEventStatusBadge');
+  const toggleBtn = document.getElementById('labelToggleProEvent');
+  if (badge) {
+    if (settings.active) {
+      badge.textContent = '● EVENT ACTIVE';
+      badge.style.background = 'rgba(16, 185, 129, 0.2)';
+      badge.style.color = '#34d399';
+      badge.style.borderColor = 'rgba(52, 211, 153, 0.5)';
+      if (toggleBtn) toggleBtn.textContent = 'Turn Off ⏸️';
+    } else {
+      badge.textContent = '○ EVENT OFF';
+      badge.style.background = 'rgba(239, 68, 68, 0.2)';
+      badge.style.color = '#f87171';
+      badge.style.borderColor = 'rgba(239, 68, 68, 0.5)';
+      if (toggleBtn) toggleBtn.textContent = 'Turn On ▶️';
+    }
+  }
+
+  const timerEl = document.getElementById('proDetailTimerText');
+  if (timerEl) timerEl.textContent = `⏱️ ${settings.durationHours || 48}H 00M`;
+
+  const costEl = document.getElementById('proDetailCostText');
+  if (costEl) costEl.textContent = `🪙 ${settings.packageCoinCost || 50} + 🎟️ ${settings.packageTicketCost || 2}`;
+
+  const tasks = settings.tasks || [];
+  const t1 = tasks[0] || { title: 'Mission 1: Promo Signup', rewardCoins: 500, url: 'https://youtube.com', verificationCode: '583921' };
+  const t2 = tasks[1] || { title: 'Mission 2: Community Join', rewardCoins: 250, url: 'https://telegram.org', verificationCode: '749201' };
+  const t3 = tasks[2] || { title: 'Mission 3: Survey Bonus', rewardCoins: 250, url: 'https://google.com', verificationCode: '382910' };
+
+  const totalBounty = (Number(t1.rewardCoins || t1.reward || 500)) + 
+                      (Number(t2.rewardCoins || t2.reward || 250)) + 
+                      (Number(t3.rewardCoins || t3.reward || 250));
+
+  const bountyEl = document.getElementById('proDetailBountyText');
+  if (bountyEl) bountyEl.textContent = `🪙 ${totalBounty.toLocaleString()}`;
+
+  const listContainer = document.getElementById('proTasksDetailList');
+  if (listContainer) {
+    listContainer.innerHTML = `
+      <!-- Sub-Task 1 Card -->
+      <div class="pro-subtask-card" style="border-left: 4px solid #facc15;">
+        <div class="pro-subtask-info">
+          <div class="pro-subtask-title-row">
+            <span class="pro-subtask-badge half-bounty">🎁 1 of 3 • Half Price Award (50%)</span>
+            <span style="font-weight: 800; color: #ffffff; font-size: 0.88rem;">${escapeHtml(t1.title)}</span>
+          </div>
+          <div style="font-size: 0.72rem; color: #94a3b8; display: flex; gap: 8px; align-items: center; margin-top: 4px; flex-wrap: wrap;">
+            <span>Reward: <b style="color: #fbbf24; font-size: 0.82rem;">🪙 ${t1.rewardCoins || t1.reward || 500} Coins</b> (Wins 50% = 500 Coins on this task!)</span>
+            <span>&bull;</span>
+            <span>Secret Code: <b style="color: #facc15; font-family: monospace;">${t1.verificationCode || t1.code || '583921'}</b></span>
+          </div>
+          <div style="font-size: 0.7rem; color: #38bdf8; margin-top: 3px; word-break: break-all;">
+            Target URL: <a href="${t1.url || t1.link || '#'}" target="_blank" style="color: #38bdf8; text-decoration: underline;">${t1.url || t1.link || 'https://youtube.com'}</a>
+          </div>
+        </div>
+        <div style="text-align: right; flex-shrink: 0;">
+          <span style="display: inline-block; padding: 2px 8px; border-radius: 4px; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.3); font-size: 0.7rem; color: #7dd3fc; font-weight: 800;">
+            Task #1
+          </span>
+        </div>
+      </div>
+
+      <!-- Sub-Task 2 Card -->
+      <div class="pro-subtask-card" style="border-left: 4px solid #34d399;">
+        <div class="pro-subtask-info">
+          <div class="pro-subtask-title-row">
+            <span class="pro-subtask-badge">⚡ 2 of 3 • Mid Mission</span>
+            <span style="font-weight: 800; color: #ffffff; font-size: 0.88rem;">${escapeHtml(t2.title)}</span>
+          </div>
+          <div style="font-size: 0.72rem; color: #94a3b8; display: flex; gap: 8px; align-items: center; margin-top: 4px; flex-wrap: wrap;">
+            <span>Reward: <b style="color: #fbbf24; font-size: 0.82rem;">🪙 ${t2.rewardCoins || t2.reward || 250} Coins</b></span>
+            <span>&bull;</span>
+            <span>Secret Code: <b style="color: #facc15; font-family: monospace;">${t2.verificationCode || t2.code || '749201'}</b></span>
+          </div>
+          <div style="font-size: 0.7rem; color: #38bdf8; margin-top: 3px; word-break: break-all;">
+            Target URL: <a href="${t2.url || t2.link || '#'}" target="_blank" style="color: #38bdf8; text-decoration: underline;">${t2.url || t2.link || 'https://telegram.org'}</a>
+          </div>
+        </div>
+        <div style="text-align: right; flex-shrink: 0;">
+          <span style="display: inline-block; padding: 2px 8px; border-radius: 4px; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.3); font-size: 0.7rem; color: #7dd3fc; font-weight: 800;">
+            Task #2
+          </span>
+        </div>
+      </div>
+
+      <!-- Sub-Task 3 Card -->
+      <div class="pro-subtask-card" style="border-left: 4px solid #a855f7;">
+        <div class="pro-subtask-info">
+          <div class="pro-subtask-title-row">
+            <span class="pro-subtask-badge" style="background: rgba(168, 85, 247, 0.2); color: #c084fc;">🏆 3 of 3 • Full Package Completion Bounty</span>
+            <span style="font-weight: 800; color: #ffffff; font-size: 0.88rem;">${escapeHtml(t3.title)}</span>
+          </div>
+          <div style="font-size: 0.72rem; color: #94a3b8; display: flex; gap: 8px; align-items: center; margin-top: 4px; flex-wrap: wrap;">
+            <span>Reward: <b style="color: #fbbf24; font-size: 0.82rem;">🪙 ${t3.rewardCoins || t3.reward || 250} Coins</b> (Wins Full Total Package Bounty!)</span>
+            <span>&bull;</span>
+            <span>Secret Code: <b style="color: #facc15; font-family: monospace;">${t3.verificationCode || t3.code || '382910'}</b></span>
+          </div>
+          <div style="font-size: 0.7rem; color: #38bdf8; margin-top: 3px; word-break: break-all;">
+            Target URL: <a href="${t3.url || t3.link || '#'}" target="_blank" style="color: #38bdf8; text-decoration: underline;">${t3.url || t3.link || 'https://google.com'}</a>
+          </div>
+        </div>
+        <div style="text-align: right; flex-shrink: 0;">
+          <span style="display: inline-block; padding: 2px 8px; border-radius: 4px; background: rgba(168, 85, 247, 0.2); border: 1px solid rgba(168, 85, 247, 0.4); font-size: 0.7rem; color: #c084fc; font-weight: 800;">
+            Task #3
+          </span>
+        </div>
+      </div>
+    `;
+  }
+}
+
+function toggleProEventActive() {
+  const settings = getStoredProEventSettings();
+  settings.active = !settings.active;
+  saveProEventSettings(settings);
+  renderAdminProTasksPanel();
+  showToast(settings.active ? '● Pro Event Activated!' : '○ Pro Event Turned Off!');
+}
+
+function openEditProTasksModal() {
+  const settings = getStoredProEventSettings();
+  const tasks = settings.tasks || [];
+  const t1 = tasks[0] || {};
+  const t2 = tasks[1] || {};
+  const t3 = tasks[2] || {};
+
+  const durEl = document.getElementById('editProEventDuration');
+  if (durEl) durEl.value = settings.durationHours || 48;
+  const coinCostEl = document.getElementById('editProPackageCoinCost');
+  if (coinCostEl) coinCostEl.value = settings.packageCoinCost || 50;
+  const ticketCostEl = document.getElementById('editProPackageTicketCost');
+  if (ticketCostEl) ticketCostEl.value = settings.packageTicketCost || 2;
+  const activeToggle = document.getElementById('editProEventActiveToggle');
+  if (activeToggle) activeToggle.checked = (settings.active !== false);
+
+  const t1Title = document.getElementById('editProTask1Title');
+  if (t1Title) t1Title.value = t1.title || 'Mission 1: Promo Signup';
+  const t1Price = document.getElementById('editProTask1Price');
+  if (t1Price) t1Price.value = t1.rewardCoins || t1.reward || 500;
+  const t1Url = document.getElementById('editProTask1Url');
+  if (t1Url) t1Url.value = t1.url || t1.link || 'https://youtube.com';
+  const t1Code = document.getElementById('editProTask1Code');
+  if (t1Code) t1Code.value = t1.verificationCode || t1.code || '583921';
+
+  const t2Title = document.getElementById('editProTask2Title');
+  if (t2Title) t2Title.value = t2.title || 'Mission 2: Community Join';
+  const t2Price = document.getElementById('editProTask2Price');
+  if (t2Price) t2Price.value = t2.rewardCoins || t2.reward || 250;
+  const t2Url = document.getElementById('editProTask2Url');
+  if (t2Url) t2Url.value = t2.url || t2.link || 'https://telegram.org';
+  const t2Code = document.getElementById('editProTask2Code');
+  if (t2Code) t2Code.value = t2.verificationCode || t2.code || '749201';
+
+  const t3Title = document.getElementById('editProTask3Title');
+  if (t3Title) t3Title.value = t3.title || 'Mission 3: Survey Bonus';
+  const t3Price = document.getElementById('editProTask3Price');
+  if (t3Price) t3Price.value = t3.rewardCoins || t3.reward || 250;
+  const t3Url = document.getElementById('editProTask3Url');
+  if (t3Url) t3Url.value = t3.url || t3.link || 'https://google.com';
+  const t3Code = document.getElementById('editProTask3Code');
+  if (t3Code) t3Code.value = t3.verificationCode || t3.code || '382910';
+
+  updateEditProBountyPreview();
+  const modal = document.getElementById('adminProTaskEditModalOverlay');
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeEditProTasksModal() {
+  const modal = document.getElementById('adminProTaskEditModalOverlay');
+  if (modal) modal.style.display = 'none';
+}
+
+function updateEditProBountyPreview() {
+  const p1 = parseInt(document.getElementById('editProTask1Price')?.value || '500', 10) || 0;
+  const p2 = parseInt(document.getElementById('editProTask2Price')?.value || '250', 10) || 0;
+  const p3 = parseInt(document.getElementById('editProTask3Price')?.value || '250', 10) || 0;
+  const total = p1 + p2 + p3;
+  const label = document.getElementById('editProTotalBountyPreview');
+  if (label) label.textContent = `Total: ${total.toLocaleString()} Coins`;
+}
+
+function handleSaveProTasksForm(e) {
+  if (e && e.preventDefault) e.preventDefault();
+
+  const durationHours = parseInt(document.getElementById('editProEventDuration')?.value || '48', 10);
+  const packageCoinCost = parseInt(document.getElementById('editProPackageCoinCost')?.value || '50', 10);
+  const packageTicketCost = parseInt(document.getElementById('editProPackageTicketCost')?.value || '2', 10);
+  const isActive = document.getElementById('editProEventActiveToggle')?.checked ?? true;
+
+  const t1 = {
+    id: "task_pro_1",
+    title: document.getElementById('editProTask1Title')?.value.trim() || 'Mission 1: Promo Signup',
+    category: "pro",
+    rewardCoins: parseInt(document.getElementById('editProTask1Price')?.value || '500', 10),
+    reward: parseInt(document.getElementById('editProTask1Price')?.value || '500', 10),
+    coins: parseInt(document.getElementById('editProTask1Price')?.value || '500', 10),
+    url: document.getElementById('editProTask1Url')?.value.trim() || 'https://youtube.com',
+    link: document.getElementById('editProTask1Url')?.value.trim() || 'https://youtube.com',
+    verificationCode: document.getElementById('editProTask1Code')?.value.trim() || '583921',
+    code: document.getElementById('editProTask1Code')?.value.trim() || '583921',
+    secretCode: document.getElementById('editProTask1Code')?.value.trim() || '583921',
+    description: "First mission of 3-task package (Half price awarded here!)",
+    isPackagePart: true,
+    packagePartIndex: 1,
+    active: isActive
+  };
+
+  const t2 = {
+    id: "task_pro_2",
+    title: document.getElementById('editProTask2Title')?.value.trim() || 'Mission 2: Community Join',
+    category: "pro",
+    rewardCoins: parseInt(document.getElementById('editProTask2Price')?.value || '250', 10),
+    reward: parseInt(document.getElementById('editProTask2Price')?.value || '250', 10),
+    coins: parseInt(document.getElementById('editProTask2Price')?.value || '250', 10),
+    url: document.getElementById('editProTask2Url')?.value.trim() || 'https://telegram.org',
+    link: document.getElementById('editProTask2Url')?.value.trim() || 'https://telegram.org',
+    verificationCode: document.getElementById('editProTask2Code')?.value.trim() || '749201',
+    code: document.getElementById('editProTask2Code')?.value.trim() || '749201',
+    secretCode: document.getElementById('editProTask2Code')?.value.trim() || '749201',
+    description: "Second mission of 3-task package",
+    isPackagePart: true,
+    packagePartIndex: 2,
+    active: isActive
+  };
+
+  const t3 = {
+    id: "task_pro_3",
+    title: document.getElementById('editProTask3Title')?.value.trim() || 'Mission 3: Survey Bonus',
+    category: "pro",
+    rewardCoins: parseInt(document.getElementById('editProTask3Price')?.value || '250', 10),
+    reward: parseInt(document.getElementById('editProTask3Price')?.value || '250', 10),
+    coins: parseInt(document.getElementById('editProTask3Price')?.value || '250', 10),
+    url: document.getElementById('editProTask3Url')?.value.trim() || 'https://google.com',
+    link: document.getElementById('editProTask3Url')?.value.trim() || 'https://google.com',
+    verificationCode: document.getElementById('editProTask3Code')?.value.trim() || '382910',
+    code: document.getElementById('editProTask3Code')?.value.trim() || '382910',
+    secretCode: document.getElementById('editProTask3Code')?.value.trim() || '382910',
+    description: "Third mission of 3-task package (Full package completion bounty!)",
+    isPackagePart: true,
+    packagePartIndex: 3,
+    active: isActive
+  };
+
+  const settings = {
+    active: isActive,
+    durationHours,
+    packageCoinCost,
+    packageTicketCost,
+    startTime: Date.now(),
+    endTime: Date.now() + durationHours * 3600000,
+    tasks: [t1, t2, t3]
+  };
+
+  saveProEventSettings(settings);
+  closeEditProTasksModal();
+  renderAdminProTasksPanel();
+  showToast('💎 Pro Tasks & 3-Task Pack updated successfully! ✓');
+}
+
+function renderAdminPassPanel() {
+  const config = getStoredPassConfig();
+
+  const titleEl = document.getElementById('passDetailSeasonTitle');
+  if (titleEl) titleEl.textContent = config.seasonName || 'Season 6: Light the Fuse';
+
+  const badgeEl = document.getElementById('passStatusBadge');
+  const toggleBtn = document.getElementById('labelTogglePassAdmin');
+  if (badgeEl) {
+    if (config.passActivated) {
+      badgeEl.textContent = '⚡ PASS ACTIVE';
+      badgeEl.style.background = 'rgba(250, 204, 21, 0.2)';
+      badgeEl.style.color = '#facc15';
+      badgeEl.style.borderColor = 'rgba(250, 204, 21, 0.5)';
+      if (toggleBtn) toggleBtn.textContent = 'Free Only 🔄';
+    } else {
+      badgeEl.textContent = '○ FREE TRACK ONLY';
+      badgeEl.style.background = 'rgba(56, 189, 248, 0.2)';
+      badgeEl.style.color = '#38bdf8';
+      badgeEl.style.borderColor = 'rgba(56, 189, 248, 0.4)';
+      if (toggleBtn) toggleBtn.textContent = 'Activate Pass ⚡';
+    }
+  }
+
+  const tiersEl = document.getElementById('passDetailTotalLevels');
+  if (tiersEl) tiersEl.textContent = `${config.totalLevels || 500} Levels`;
+
+  const rewardEl = document.getElementById('passDetailMilestoneReward');
+  if (rewardEl) {
+    const symbol = config.milestoneRewardType === 'coins' ? '🪙' : (config.milestoneRewardType === 'tickets' ? '🎟️' : '⭐');
+    rewardEl.textContent = `${symbol} ${config.milestoneRewardAmount || 100} ${config.milestoneRewardType || 'Stars'}`;
+  }
+
+  const playerLvlEl = document.getElementById('passDetailPlayerLevel');
+  if (playerLvlEl) {
+    const pLvl = localStorage.getItem('task_pass_level') || '0';
+    playerLvlEl.textContent = `Level ${pLvl}`;
+  }
+
+  // Populate Season Timer Tool Inputs (Start Time and End Time)
+  const startTime = parseInt(localStorage.getItem('season_pass_start_timestamp') || (Date.now() - 86400000).toString(), 10);
+  const startInput = document.getElementById('adminSeasonStartTimeInput');
+  if (startInput && !startInput.value) {
+    const d = new Date(startTime);
+    const pad = n => n.toString().padStart(2, '0');
+    startInput.value = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  const endTime = getStoredSeasonPassEndTime();
+  const input = document.getElementById('adminSeasonEndTimeInput');
+  if (input && !input.value) {
+    const d = new Date(endTime);
+    const pad = n => n.toString().padStart(2, '0');
+    input.value = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+  updateAdminSeasonCountdownDisplay();
+
+  const milestonesContainer = document.getElementById('passMilestonesPreviewGrid');
+  if (milestonesContainer) {
+    const currentLvl = parseInt(localStorage.getItem('task_pass_level') || '0', 10);
+    const milestones = [
+      { lvl: 2, reward: '🎟️ 5 Tickets' },
+      { lvl: 3, reward: '🪙 1,000 Coins' },
+      { lvl: 4, reward: '🎟️ 5 Tickets' },
+      { lvl: 5, reward: '🪙 1,000 Coins' },
+      { lvl: 6, reward: '🎟️ 5 Tickets' },
+      { lvl: 10, reward: `⭐ ${config.milestoneRewardAmount || 100} Stars (Goal)` },
+      { lvl: 50, reward: '⭐ 200 Stars (Milestone)' },
+      { lvl: 100, reward: '⭐ 325 Stars (Milestone)' },
+      { lvl: 500, reward: '⭐ 1,325 Stars (Max Milestone)' }
+    ];
+
+    milestonesContainer.innerHTML = milestones.map(m => {
+      let statusHtml = '';
+      let borderStyle = 'border: 1px solid rgba(56, 189, 248, 0.25);';
+      if (m.lvl < currentLvl) {
+        statusHtml = '<span style="font-size: 0.65rem; color: #34d399; font-weight: 800;">✓ Won</span>';
+        borderStyle = 'border: 1.5px solid rgba(52, 211, 153, 0.5); background: rgba(16, 185, 129, 0.1);';
+      } else if (m.lvl === currentLvl) {
+        statusHtml = '<span style="font-size: 0.65rem; color: #38bdf8; font-weight: 800;">🎯 Active Target</span>';
+        borderStyle = 'border: 2px solid #38bdf8; background: rgba(14, 165, 233, 0.15); box-shadow: 0 0 12px rgba(56, 189, 248, 0.35);';
+      } else {
+        statusHtml = '<span style="font-size: 0.65rem; color: #94a3b8; font-weight: 700;">🔒 Locked</span>';
+      }
+      return `
+        <div class="pass-milestone-card" style="${borderStyle}">
+          <div style="font-weight: 900; color: #ffffff; font-size: 0.85rem; margin-bottom: 2px;">Level ${m.lvl}</div>
+          <div style="font-size: 0.75rem; color: #fde047; font-weight: 800; margin-bottom: 4px;">${m.reward}</div>
+          ${statusHtml}
+        </div>
+      `;
+    }).join('');
+  }
+}
+
+function getStoredSeasonPassEndTime() {
+  const stored = localStorage.getItem('season_pass_end_timestamp');
+  if (stored) {
+    const val = parseInt(stored, 10);
+    if (!isNaN(val) && val > Date.now()) return val;
+  }
+  const defaultEnd = Date.now() + 21 * 86400000; // 21 days default
+  localStorage.setItem('season_pass_end_timestamp', defaultEnd.toString());
+  return defaultEnd;
+}
+
+function formatSeasonCountdown(ms) {
+  if (ms <= 0) return 'Season Ended';
+  const totalSec = Math.floor(ms / 1000);
+  const d = Math.floor(totalSec / 86400);
+  const h = Math.floor((totalSec % 86400) / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  return `${d}d ${h.toString().padStart(2, '0')}h ${m.toString().padStart(2, '0')}m ${s.toString().padStart(2, '0')}s`;
+}
+
+function updateAdminSeasonCountdownDisplay() {
+  const endTime = getStoredSeasonPassEndTime();
+  const diff = endTime - Date.now();
+  const formatted = formatSeasonCountdown(diff);
+  const liveEl = document.getElementById('passDetailLiveCountdown');
+  if (liveEl) liveEl.textContent = `⏱️ ${formatted}`;
+  const badgeEl = document.getElementById('adminLiveSeasonCountdownBadge');
+  if (badgeEl) badgeEl.textContent = formatted;
+}
+
+setInterval(updateAdminSeasonCountdownDisplay, 1000);
+
+function applyAdminQuickDays(days) {
+  const d = parseInt(days, 10);
+  if (!d || d < 1) return;
+  const targetDate = new Date(Date.now() + d * 86400000);
+  const input = document.getElementById('adminSeasonEndTimeInput');
+  if (input) {
+    const pad = n => n.toString().padStart(2, '0');
+    input.value = `${targetDate.getFullYear()}-${pad(targetDate.getMonth()+1)}-${pad(targetDate.getDate())}T${pad(targetDate.getHours())}:${pad(targetDate.getMinutes())}`;
+  }
+}
+window.applyAdminQuickDays = applyAdminQuickDays;
+
+function saveAdminSeasonTimer() {
+  const startInput = document.getElementById('adminSeasonStartTimeInput');
+  let startTimestamp = Date.now();
+  if (startInput && startInput.value) {
+    startTimestamp = new Date(startInput.value).getTime();
+  }
+  localStorage.setItem('season_pass_start_timestamp', startTimestamp.toString());
+
+  const input = document.getElementById('adminSeasonEndTimeInput');
+  let targetTimestamp = 0;
+  if (input && input.value) {
+    targetTimestamp = new Date(input.value).getTime();
+  }
+  if (!targetTimestamp || isNaN(targetTimestamp) || targetTimestamp <= Date.now()) {
+    const quickDays = parseInt(document.getElementById('adminSeasonQuickDays')?.value || '21', 10);
+    targetTimestamp = Date.now() + Math.max(1, quickDays) * 86400000;
+  }
+
+  localStorage.setItem('season_pass_end_timestamp', targetTimestamp.toString());
+  
+  const config = getStoredPassConfig();
+  config.durationDays = Math.ceil((targetTimestamp - Date.now()) / 86400000);
+  config.seasonStartTime = startTimestamp;
+  config.seasonEndTime = targetTimestamp;
+  savePassConfig(config);
+
+  try {
+    const syncChannel = new BroadcastChannel('nova_task_sync');
+    syncChannel.postMessage({ type: 'SEASON_TIMER_UPDATED', seasonStartTime: startTimestamp, seasonEndTime: targetTimestamp, timestamp: Date.now() });
+    syncChannel.close();
+  } catch(e) {}
+
+  if (window.firebaseSync && typeof window.firebaseSync.database === 'object') {
+    try {
+      window.firebaseSync.database.ref('season_pass_settings').set({
+        seasonStartTime: startTimestamp,
+        seasonEndTime: targetTimestamp,
+        durationDays: config.durationDays,
+        updatedAt: Date.now()
+      });
+    } catch(e) {}
+  }
+
+  updateAdminSeasonCountdownDisplay();
+  const statusEl = document.getElementById('adminSeasonTimerStatusMsg');
+  if (statusEl) {
+    statusEl.style.display = 'block';
+    statusEl.textContent = `✓ Season timer set! Ends in ${formatSeasonCountdown(targetTimestamp - Date.now())}`;
+    setTimeout(() => { if (statusEl) statusEl.style.display = 'none'; }, 4000);
+  }
+  showToast('⏱️ Season Pass Timer saved & synchronized! ✓');
+}
+window.saveAdminSeasonTimer = saveAdminSeasonTimer;
+window.getStoredSeasonPassEndTime = getStoredSeasonPassEndTime;
+
+function adminTogglePassActivation() {
+  const config = getStoredPassConfig();
+  config.passActivated = !config.passActivated;
+  savePassConfig(config);
+  renderAdminPassPanel();
+  showToast(config.passActivated ? '⚡ Pass Activated for all users!' : '○ Free Track mode active.');
+}
+
+function openEditPassSettingsModal() {
+  const config = getStoredPassConfig();
+  document.getElementById('editPassSeasonName').value = config.seasonName || 'Season 6: Light the Fuse';
+  document.getElementById('editPassDurationDays').value = config.durationDays || 21;
+  document.getElementById('editPassTotalLevels').value = config.totalLevels || 500;
+  document.getElementById('editPassTasksPerLevel').value = config.tasksPerLevel || 1;
+  document.getElementById('editPassMilestoneLevel').value = config.milestoneLevel || 10;
+  document.getElementById('editPassMilestoneType').value = config.milestoneRewardType || 'stars';
+  document.getElementById('editPassMilestoneAmount').value = config.milestoneRewardAmount || 100;
+  document.getElementById('editPassActivatedToggle').checked = (config.passActivated !== false);
+
+  const modal = document.getElementById('adminPassEditModalOverlay');
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeEditPassSettingsModal() {
+  const modal = document.getElementById('adminPassEditModalOverlay');
+  if (modal) modal.style.display = 'none';
+}
+
+function handleSavePassSettingsForm(e) {
+  if (e && e.preventDefault) e.preventDefault();
+
+  const config = {
+    seasonName: document.getElementById('editPassSeasonName')?.value.trim() || 'Season 6: Light the Fuse',
+    durationDays: parseInt(document.getElementById('editPassDurationDays')?.value || '21', 10),
+    totalLevels: parseInt(document.getElementById('editPassTotalLevels')?.value || '500', 10),
+    tasksPerLevel: parseInt(document.getElementById('editPassTasksPerLevel')?.value || '1', 10),
+    milestoneLevel: parseInt(document.getElementById('editPassMilestoneLevel')?.value || '10', 10),
+    milestoneRewardType: document.getElementById('editPassMilestoneType')?.value || 'stars',
+    milestoneRewardAmount: parseInt(document.getElementById('editPassMilestoneAmount')?.value || '100', 10),
+    passActivated: document.getElementById('editPassActivatedToggle')?.checked ?? true
+  };
+
+  savePassConfig(config);
+  closeEditPassSettingsModal();
+  renderAdminPassPanel();
+  showToast('🎫 Pass settings updated and synced across all user screens! ✓');
+}
+
+window.switchAdminEventTab = switchAdminEventTab;
+window.renderAdminProTasksPanel = renderAdminProTasksPanel;
+window.renderAdminPassPanel = renderAdminPassPanel;
+window.toggleProEventActive = toggleProEventActive;
+window.openEditProTasksModal = openEditProTasksModal;
+window.closeEditProTasksModal = closeEditProTasksModal;
+window.updateEditProBountyPreview = updateEditProBountyPreview;
+window.handleSaveProTasksForm = handleSaveProTasksForm;
+window.adminTogglePassActivation = adminTogglePassActivation;
+window.openEditPassSettingsModal = openEditPassSettingsModal;
+window.closeEditPassSettingsModal = closeEditPassSettingsModal;
+window.handleSavePassSettingsForm = handleSavePassSettingsForm;

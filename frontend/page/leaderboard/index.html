@@ -1,0 +1,2194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Task Pass — 500 Levels Battle Pass</title>
+
+  <!-- Google Fonts: Fredoka (Main UI) & Titan One / Lilita One (Game Display) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700;800;900&family=Lilita+One&family=Titan+One&display=swap" rel="stylesheet" />
+
+  <link rel="dns-prefetch" href="//libtl.com" />
+  <!-- Rewarded Ads SDK -->
+  <script
+    async
+    src="//libtl.com/sdk.js"
+    data-zone="11677609"
+    data-sdk="show_11677609">
+  </script>
+  <script src="../../ad-service.js"></script>
+
+  <!-- Firebase SDK & Real-Time Cloud Connection -->
+  <script type="module" src="../../firebase-config.js"></script>
+
+  <!-- Inherit Home Page Cyber Theme CSS -->
+  <link rel="stylesheet" href="../home/style.css" />
+
+  <style>
+    :root {
+      --font-display: "Titan One", "Lilita One", cursive, sans-serif;
+      --font-ui: "Fredoka", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --cyber-blue: #38bdf8;
+      --cyber-gold: #facc15;
+      --bg-dark: #060e24;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: var(--font-ui);
+      background-color: #030816 !important;
+      color: #f8fafc;
+      overflow-x: hidden;
+      min-height: 100vh;
+      display: flex !important;
+      justify-content: center !important;
+      align-items: flex-start !important;
+    }
+
+    /* Outer Mobile View Shell matching Home page (Image 2) */
+    .mobile-container {
+      width: 100% !important;
+      max-width: 440px !important;
+      margin: 0 auto !important;
+      min-height: 100vh;
+      background-color: #060e24 !important;
+      border-left: 1px solid rgba(56, 189, 248, 0.15) !important;
+      border-right: 1px solid rgba(56, 189, 248, 0.15) !important;
+      box-shadow: 0 0 50px rgba(0, 0, 0, 0.7), 0 0 20px rgba(56, 189, 248, 0.08) !important;
+      position: relative;
+      display: flex !important;
+      flex-direction: column !important;
+      padding-bottom: 84px;
+      box-sizing: border-box;
+      overflow-x: hidden;
+    }
+
+    .page-content {
+      flex: 1;
+      width: 100% !important;
+      max-width: 440px !important;
+      padding: 1.1rem 0.95rem !important;
+      display: flex !important;
+      flex-direction: column !important;
+      gap: 1.1rem !important;
+      box-sizing: border-box;
+    }
+
+    /* Header Streak Pill matching Home page Image 2 */
+    .streak-pill {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      background: linear-gradient(135deg, #1a0f05 0%, #0a1738 100%);
+      border: 1px solid #f97316;
+      padding: 0.3rem 0.65rem;
+      border-radius: 9999px;
+      font-weight: 800;
+      color: #fb923c;
+      font-size: 0.825rem;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+      transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+      cursor: pointer;
+    }
+    .streak-pill:active {
+      transform: scale(0.96);
+    }
+    .streak-pill .streak-value {
+      color: #fb923c;
+      font-weight: 900;
+    }
+
+    /* Header Ticket Pill (matches Home page .coin-pill & .star-pill) */
+    .ticket-pill {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      background: linear-gradient(135deg, rgba(244, 114, 182, 0.18) 0%, #0a1738 100%);
+      border: 1px solid #f472b6;
+      padding: 0.3rem 0.65rem;
+      border-radius: 9999px;
+      font-weight: 800;
+      color: #f472b6;
+      font-size: 0.825rem;
+      box-shadow: 0 2px 8px rgba(244, 114, 182, 0.25);
+      transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+      cursor: pointer;
+    }
+    .ticket-pill:active {
+      transform: scale(0.96);
+    }
+    .ticket-pill .ticket-value {
+      color: #f472b6;
+      font-weight: 900;
+    }
+
+    /* Pass Hero Action Footer - Removed per user request */
+    .pass-hero-footer {
+      display: none !important;
+    }
+
+    /* Tactile 3D Buttons for Pass Toggle */
+    .btn-toggle-pass-amber {
+      padding: 6px 14px;
+      border-radius: 10px;
+      font-size: 0.75rem;
+      font-weight: 900;
+      color: #422006;
+      background: linear-gradient(155deg, #facc15 0%, #f59e0b 50%, #d97706 100%);
+      border: 1.5px solid #fef08a;
+      box-shadow: 0 3px 10px rgba(245, 158, 11, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .btn-toggle-pass-amber:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 14px rgba(245, 158, 11, 0.6);
+    }
+    .btn-toggle-pass-amber:active {
+      transform: scale(0.95);
+    }
+
+    .btn-toggle-pass-green {
+      padding: 6px 14px;
+      border-radius: 10px;
+      font-size: 0.75rem;
+      font-weight: 900;
+      color: #ffffff;
+      background: linear-gradient(155deg, #10b981 0%, #059669 100%);
+      border: 1.5px solid #6ee7b7;
+      box-shadow: 0 3px 10px rgba(16, 185, 129, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .btn-toggle-pass-green:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 14px rgba(16, 185, 129, 0.6);
+    }
+    .btn-toggle-pass-green:active {
+      transform: scale(0.95);
+    }
+
+    /* Quick Jump Scrubber - Removed per user request */
+    .jump-bar {
+      display: none !important;
+    }
+    .task-pass-levels-strip-container {
+      display: none !important;
+    }
+    .btn-all-levels-gold {
+      display: none !important;
+    }
+
+    /* Sticky Column Headers (FREE, TIER, PASS) */
+    .pass-sticky-header {
+      position: sticky;
+      top: 61px;
+      z-index: 45;
+      background: rgba(6, 14, 36, 0.95);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-top: 1px solid rgba(56, 189, 248, 0.15);
+      border-bottom: 1px solid rgba(56, 189, 248, 0.15);
+      padding: 0.5rem 0.85rem;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+      border-radius: 14px;
+      margin-bottom: 0.5rem;
+    }
+    .pass-header-grid {
+      display: grid;
+      grid-template-columns: 1fr 54px 1fr;
+      align-items: center;
+      gap: 8px;
+    }
+    .pass-col-header {
+      padding: 6px 0;
+      text-align: center;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      user-select: none;
+    }
+    .header-free {
+      background: linear-gradient(155deg, #0284c7 0%, #0369a1 100%);
+      border: 1.5px solid #38bdf8;
+      box-shadow: 0 3px 10px rgba(14, 165, 233, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    }
+    .header-tier {
+      background: linear-gradient(155deg, #1e293b 0%, #0f172a 100%);
+      border: 1.5px solid #475569;
+      box-shadow: 0 3px 8px rgba(0, 0, 0, 0.5);
+    }
+    .header-pass {
+      background: linear-gradient(155deg, #f59e0b 0%, #d97706 100%);
+      border: 1.5px solid #facc15;
+      box-shadow: 0 3px 10px rgba(245, 158, 11, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+    }
+    .col-header-label {
+      font-size: 0.82rem;
+      letter-spacing: 0.08em;
+      color: #ffffff;
+    }
+    .tier-label {
+      color: #cbd5e1;
+      font-size: 0.72rem;
+    }
+    .pass-label {
+      color: #422006;
+    }
+    .pass-active-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #34d399;
+      border: 1px solid #064e3b;
+      box-shadow: 0 0 6px #34d399;
+    }
+
+    /* 500-Level Track Container & Rail */
+    .pass-track-wrap {
+      position: relative;
+      width: 100%;
+      padding: 0.5rem 0 3rem 0;
+      box-sizing: border-box;
+    }
+
+    .progress-rail {
+      position: absolute;
+      top: 14px;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 14px;
+      background-color: #0b1530;
+      border-left: 2px solid #030816;
+      border-right: 2px solid #030816;
+      border-radius: 999px;
+      overflow: hidden;
+      z-index: 5;
+      box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.85);
+    }
+
+    .progress-checkered-fill {
+      width: 100%;
+      background-color: #38bdf8;
+      background-image:
+        linear-gradient(45deg, #0284c7 25%, transparent 25%),
+        linear-gradient(-45deg, #0284c7 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #0284c7 75%),
+        linear-gradient(-45deg, transparent 75%, #0284c7 75%);
+      background-size: 10px 10px;
+      background-position: 0 0, 0 5px, 5px -5px, -5px 0;
+      box-shadow: 0 0 12px rgba(56, 189, 248, 0.8), inset 0 2px 0 rgba(255,255,255,0.4);
+      transition: height 0.3s ease;
+      height: 0px;
+    }
+
+    /* Tier Row */
+    .tier-row {
+      position: relative;
+      display: grid;
+      grid-template-columns: 1fr 54px 1fr;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 20px;
+      z-index: 10;
+    }
+
+    .tier-badge {
+      width: 44px;
+      height: 44px;
+      margin: 0 auto;
+      border-radius: 12px;
+      background: linear-gradient(155deg, #1e293b 0%, #0f172a 100%);
+      border: 2px solid #475569;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Titan One', 'Fredoka', cursive, sans-serif;
+      font-size: 0.95rem;
+      color: #94a3b8;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+      z-index: 15;
+      transition: all 0.25s ease;
+    }
+
+    .tier-row.reached .tier-badge {
+      background: linear-gradient(155deg, #0284c7 0%, #075985 100%);
+      border-color: #38bdf8;
+      color: #ffffff;
+      box-shadow: 0 0 14px rgba(56, 189, 248, 0.6), inset 0 1.5px 0 rgba(255, 255, 255, 0.45);
+      transform: scale(1.05);
+    }
+
+    .tier-row.current .tier-badge {
+      background: linear-gradient(155deg, #f59e0b 0%, #b45309 100%);
+      border-color: #fde047;
+      color: #ffffff;
+      box-shadow: 0 0 20px rgba(250, 204, 21, 0.85), inset 0 2px 0 rgba(255, 255, 255, 0.6);
+      transform: scale(1.15);
+      animation: currentBadgePulse 2s infinite ease-in-out;
+    }
+
+    @keyframes currentBadgePulse {
+      0%, 100% { transform: scale(1.15); box-shadow: 0 0 16px rgba(250, 204, 21, 0.7); }
+      50% { transform: scale(1.22); box-shadow: 0 0 24px rgba(250, 204, 21, 1); }
+    }
+
+    /* Cards */
+    .pass-card {
+      position: relative;
+      border-radius: 16px;
+      padding: 10px 8px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+      box-sizing: border-box;
+      min-height: 116px;
+      justify-content: space-between;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45), inset 0 1px 1px rgba(255, 255, 255, 0.1);
+    }
+
+    .pass-card:active {
+      transform: scale(0.96);
+    }
+
+    /* Free Card (Matches Home page Cyber Blue Theme) */
+    .card-free-tier {
+      background: linear-gradient(155deg, rgba(14, 165, 233, 0.12) 0%, rgba(10, 23, 56, 0.85) 100%);
+      border: 1.5px solid rgba(56, 189, 248, 0.35);
+    }
+    .card-free-tier:hover {
+      border-color: #38bdf8;
+      box-shadow: 0 8px 22px rgba(0, 0, 0, 0.6), 0 0 16px rgba(56, 189, 248, 0.3);
+      transform: translateY(-2px);
+    }
+
+    /* Pass Card (Matches Home page Gold/VIP Theme) */
+    .card-pass-tier {
+      background: linear-gradient(155deg, rgba(234, 179, 8, 0.14) 0%, rgba(30, 20, 10, 0.85) 100%);
+      border: 1.5px solid rgba(250, 204, 21, 0.35);
+    }
+    .card-pass-tier:hover {
+      border-color: #facc15;
+      box-shadow: 0 8px 22px rgba(0, 0, 0, 0.6), 0 0 16px rgba(250, 204, 21, 0.35);
+      transform: translateY(-2px);
+    }
+    .card-pass-tier.locked-padlock {
+      filter: saturate(0.65) brightness(0.85);
+    }
+
+    /* Status Pills inside Tier Cards */
+    .card-status-pill {
+      font-size: 0.66rem;
+      font-weight: 800;
+      padding: 2.5px 8px;
+      border-radius: 999px;
+      line-height: 1.1;
+      margin-top: 4px;
+      white-space: nowrap;
+    }
+    .pill-claimed {
+      background: rgba(16, 185, 129, 0.2);
+      border: 1px solid #10b981;
+      color: #34d399;
+    }
+    .pill-claim {
+      background: linear-gradient(155deg, #10b981 0%, #059669 100%);
+      border: 1px solid #6ee7b7;
+      color: #ffffff;
+      animation: claimPulse 1.5s infinite;
+      box-shadow: 0 0 10px rgba(16, 185, 129, 0.6);
+    }
+    .pill-ad {
+      background: linear-gradient(155deg, #9333ea 0%, #db2777 100%);
+      border: 1px solid #f472b6;
+      color: #ffffff;
+      animation: claimPulse 1.5s infinite;
+      box-shadow: 0 0 12px rgba(219, 39, 119, 0.6);
+    }
+    .pill-locked {
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      color: #94a3b8;
+    }
+
+    @keyframes claimPulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.06); }
+    }
+
+    /* Reward Detail & Claim Modal (Styled to match Home verification modals) */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(3, 8, 22, 0.88);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      z-index: 10005;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      box-sizing: border-box;
+    }
+    .reward-modal-card {
+      background: linear-gradient(160deg, #0b1a3d 0%, #060e24 100%);
+      border: 2px solid rgba(56, 189, 248, 0.4);
+      border-radius: 20px;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.8), 0 0 24px rgba(56, 189, 248, 0.25);
+      max-width: 360px;
+      width: 100%;
+      text-align: center;
+      padding: 1.5rem;
+      box-sizing: border-box;
+      position: relative;
+    }
+    .modal-reward-title {
+      font-size: 1.35rem;
+      margin-bottom: 0.35rem;
+      color: #ffffff;
+    }
+    .modal-track-badge {
+      display: inline-block;
+      padding: 3px 12px;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      font-weight: 800;
+      margin-bottom: 0.85rem;
+    }
+    .modal-reward-desc {
+      font-size: 0.82rem;
+      color: #cbd5e1;
+      line-height: 1.45;
+      margin-bottom: 1.25rem;
+    }
+    .modal-btn-close {
+      flex: 1;
+      padding: 0.65rem;
+      border-radius: 12px;
+      background: rgba(30, 41, 59, 0.85);
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      color: #cbd5e1;
+      font-weight: 800;
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .modal-btn-close:hover {
+      background: rgba(51, 65, 85, 0.9);
+      color: #ffffff;
+    }
+    .modal-btn-claim {
+      flex: 1;
+      padding: 0.65rem;
+      border-radius: 12px;
+      font-weight: 900;
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .modal-btn-claim:active {
+      transform: scale(0.96);
+    }
+
+    .roadmap-modal-card {
+      transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+      transform: scale(0.94) translateY(14px);
+    }
+    .task-verify-modal-overlay.active .roadmap-modal-card {
+      transform: scale(1) translateY(0);
+    }
+
+    /* Toast Notification */
+    .arcade-toast-pill {
+      position: fixed;
+      bottom: 84px;
+      left: 50%;
+      transform: translateX(-50%) translateY(12px);
+      z-index: 10010;
+      pointer-events: none;
+      transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+      opacity: 0;
+      padding: 0.6rem 1.1rem;
+      border-radius: 999px;
+      background: rgba(10, 23, 56, 0.95);
+      border: 1.5px solid #38bdf8;
+      color: #ffffff;
+      font-weight: 800;
+      font-size: 0.8rem;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7), 0 0 16px rgba(56, 189, 248, 0.4);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Mobile View Screen Shell matching Home page -->
+  <div class="mobile-container">
+
+    <!-- ======================================================================
+         1. TOP HEADER HUD (Back Button, Coins, Stars, Tickets)
+         ====================================================================== -->
+    <header class="home-header">
+      <div class="header-user" onclick="navigateHome()" style="cursor: pointer;" title="Return to Home">
+        <div class="user-avatar" id="headerUserAvatar">⚡</div>
+        <div class="user-meta">
+          <span class="user-name" id="headerUserName">patel gamer</span>
+          <span class="user-level" id="userRankDisplay">RANK #1</span>
+        </div>
+      </div>
+
+      <div class="header-pills">
+        <div class="coin-pill" id="coinPill" title="Total Coin Balance">
+          <span>🪙</span>
+          <span class="coin-value" id="hudCoins">0</span>
+        </div>
+        <div class="star-pill" id="starPill" title="Total Star Balance">
+          <span>⭐</span>
+          <span class="star-value" id="hudStars">0</span>
+        </div>
+        <div class="streak-pill" id="streakPill" title="Daily Streak Rewards">
+          <span class="streak-logo">🔥</span>
+          <span class="streak-value" id="userStreakDisplay">Day 4</span>
+        </div>
+        <div class="ticket-pill" id="ticketPill" title="Total Ticket Balance">
+          <span>🎟️</span>
+          <span class="ticket-value" id="hudTickets">0</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- ======================================================================
+         PAGE CONTENT CONTAINER (Matches Home Page .page-content)
+         ====================================================================== -->
+    <main class="page-content" style="padding-bottom: 2rem;">
+
+      <!-- ======================================================================
+           2. TASK PASS HERO CARD (.forge-card)
+           ====================================================================== -->
+      <div class="task-pass-widget-wrap">
+        <section class="forge-card" id="forgeCard">
+          <!-- Top-Left Floating Gold Pill (3/10) -->
+          <div class="top-pill">
+            <span id="cycleTaskTag" class="game-outline-sm">3/10</span>
+          </div>
+
+          <!-- Top Row: Title & Season Pass Activation Button -->
+          <div class="task-pass-header-row" style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 0.35rem;">
+            <div style="display: flex; flex-direction: column; gap: 2px;">
+              <span class="game-outline task-pass-title">TASK PASS</span>
+              <span style="font-size: 0.68rem; color: #38bdf8; font-weight: 800;" id="passHeroSeasonCountdown">⏱️ Season Ends: Calculating...</span>
+            </div>
+            <button type="button" class="btn-toggle-pass-amber" id="btnToggleSeasonPass" onclick="openActivatePassModal()" style="padding: 5px 12px; font-size: 0.72rem; font-weight: 900; border-radius: 999px; cursor: pointer; white-space: nowrap; box-shadow: 0 3px 10px rgba(245, 158, 11, 0.45); transition: all 0.2s ease;">
+              ⚡ Activate Pass (3,000 ⭐)
+            </button>
+          </div>
+
+          <!-- Task Pass Progress Track Row: framed on both sides by Level Badges (Level to 10 Level) -->
+          <div class="task-pass-track-row" style="margin-bottom: 0.85rem;">
+            <!-- Left Side: Start / Current Level Badge -->
+            <div class="level-badge" id="levelNumBadge" title="Current Level">
+              <span id="levelNumText" class="game-outline">0</span>
+            </div>
+
+            <!-- Central Progress Track (Loading Bar) -->
+            <div class="game-progress-track">
+              <div class="game-progress-fill" id="taskProgressBar" style="width: 0%;"></div>
+              <span class="task-pass-count-text game-outline-sm" id="taskCountText">0 / 10 Tasks</span>
+            </div>
+
+            <!-- Right Side: 10-Level Target Milestone Badge (Circular Gold Star Medal matching Image 4) -->
+            <div class="level-badge level-badge-target" id="targetLevelBadge" title="Milestone Target: Level 10">
+              <div class="target-star-coin-inner">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="#ffffff" stroke="#d97706" stroke-width="1.2">
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                </svg>
+              </div>
+              <span class="target-milestone-points game-outline" id="rewardAmountText">1000</span>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- ======================================================================
+           4. STICKY COLUMN HEADERS (FREE, TIER, PASS)
+           ====================================================================== -->
+      <div class="pass-sticky-header">
+        <div class="pass-header-grid">
+          <!-- FREE Badge -->
+          <div class="pass-col-header header-free">
+            <span class="game-outline-sm col-header-label">FREE</span>
+          </div>
+
+          <!-- TIER Badge -->
+          <div class="pass-col-header header-tier">
+            <span class="game-outline-sm col-header-label tier-label">TIER</span>
+          </div>
+
+          <!-- PASS Badge -->
+          <div class="pass-col-header header-pass" id="passHeaderBadge" onclick="openActivatePassModal()" role="button" tabindex="0" style="cursor: pointer;" title="Click to activate Season Pass (3,000 ⭐)">
+            <span class="game-outline-sm col-header-label pass-label">PASS</span>
+            <span id="passActiveDot" class="hidden pass-active-dot"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ======================================================================
+           5. 500-LEVEL BATTLE PASS TRACK (Levels 1 to 500 Generated Dynamically)
+           ====================================================================== -->
+      <div class="pass-track-wrap" id="passTrackWrap">
+        <!-- Central Vertical Checkered Progress Rail -->
+        <div class="progress-rail" id="progressRail">
+          <div class="progress-checkered-fill" id="progressFill"></div>
+        </div>
+
+        <!-- 500 Level Rows Container -->
+        <div id="tiersContainer">
+          <!-- Generated by JavaScript: Level 1 to Level 500 -->
+        </div>
+      </div>
+
+    </main>
+
+    <!-- ======================================================================
+         6. EXACT HOME PAGE BOTTOM MENU BAR (Shop, Pass, Home, Wallet, Profile)
+         ====================================================================== -->
+    <nav class="below-menu-bar" id="belowMenuBar" aria-label="Bottom Navigation">
+      <!-- 1. Shop Page Link -->
+      <a href="../shop/index.html" class="below-menu-item" id="menuShop" title="Shop">
+        <div class="menu-icon-wrap">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <path d="M16 10a4 4 0 0 1-8 0"></path>
+          </svg>
+        </div>
+        <span class="menu-label">Shop</span>
+      </a>
+
+      <!-- 2. Pass Page Link (Active with Gold/Cyan Glow) -->
+      <a href="../leaderboard/index.html" class="below-menu-item active" id="menuLeaderboard" title="500 Levels Battle Pass">
+        <div class="menu-icon-wrap">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path>
+            <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path>
+            <path d="M4 22h16"></path>
+            <path d="M10 14.66V17c0 .55-.45 1-1 1H7c-.55 0-1-.45-1-1v-2.34"></path>
+            <path d="M18 14.66V17c0 .55-.45 1-1 1h-2c-.55 0-1-.45-1-1v-2.34"></path>
+            <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"></path>
+          </svg>
+        </div>
+        <span class="menu-label">Pass</span>
+      </a>
+
+      <!-- 3. Home Page Link (Center Elevated) -->
+      <a href="../home/index.html" class="below-menu-item center-home-btn" id="menuHome" title="Home">
+        <div class="center-home-icon-wrap">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+            <polyline points="9 22 9 12 15 12 15 22"></polyline>
+          </svg>
+        </div>
+        <span class="menu-label">Home</span>
+      </a>
+
+      <!-- 4. Wallet Page Link -->
+      <a href="../wallet/index.html" class="below-menu-item" id="menuWallet" title="Wallet">
+        <div class="menu-icon-wrap">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"></path>
+            <path d="M3 5v14a2 2 0 0 0 2 2h16v-5"></path>
+            <path d="M18 12a2 2 0 0 0 0 4h4v-4Z"></path>
+          </svg>
+        </div>
+        <span class="menu-label">Wallet</span>
+      </a>
+
+      <!-- 5. Profile Page Link -->
+      <a href="../profile/index.html" class="below-menu-item" id="menuProfile" title="Profile">
+        <div class="menu-icon-wrap">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path>
+            <circle cx="12" cy="7" r="4"></circle>
+          </svg>
+        </div>
+        <span class="menu-label">Profile</span>
+      </a>
+    </nav>
+
+    <!-- Toast Notification -->
+    <div id="arcadeToast" class="arcade-toast-pill">
+      <span id="toastMsg">Notification</span>
+    </div>
+
+  </div> <!-- End .mobile-container -->
+
+  <!-- TASK PASS ROADMAP MODAL - Removed per user request -->
+  <div id="taskPassRoadmapModalOverlay" style="display: none !important; pointer-events: none !important;"></div>
+
+  <!-- ACTIVATE SEASON PASS (3000 STARS) MODAL -->
+  <div class="task-verify-modal-overlay" id="activatePassModalOverlay" onclick="if(event.target && event.target.id === 'activatePassModalOverlay') closeActivatePassModal()" style="display: none; position: fixed; inset: 0; background: rgba(3, 8, 22, 0.88); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); z-index: 10005; align-items: center; justify-content: center; padding: 1rem; box-sizing: border-box;">
+    <div class="roadmap-modal-card" style="background: linear-gradient(155deg, #0d1a36 0%, #070e22 100%); border: 2px solid #facc15; border-radius: 24px; width: 100%; max-width: 420px; display: flex; flex-direction: column; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.9), 0 0 32px rgba(250, 204, 21, 0.3); overflow: hidden; box-sizing: border-box; text-align: center; padding: 1.5rem 1.25rem;">
+      
+      <!-- Close button -->
+      <div style="display: flex; justify-content: flex-end; margin-bottom: -10px;">
+        <button type="button" onclick="closeActivatePassModal()" style="background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); color: #ffffff; width: 30px; height: 30px; border-radius: 50%; font-size: 0.95rem; cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: 900;">✕</button>
+      </div>
+
+      <!-- Icon -->
+      <div style="font-size: 3.5rem; line-height: 1; margin: 0.25rem 0 0.5rem; filter: drop-shadow(0 6px 12px rgba(250, 204, 21, 0.4));">
+        ⚡⭐
+      </div>
+
+      <!-- Title -->
+      <div class="game-outline" style="font-size: 1.45rem; font-weight: 900; color: #facc15; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.25rem;">
+        Activate Season Pass
+      </div>
+      <div style="font-size: 0.78rem; font-weight: 800; color: #38bdf8; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 1rem;">
+        500 Golden Pass Tiers
+      </div>
+
+      <!-- Price Box -->
+      <div style="background: rgba(250, 204, 21, 0.1); border: 1.5px solid rgba(250, 204, 21, 0.45); border-radius: 16px; padding: 0.85rem 1rem; margin-bottom: 1rem; display: flex; align-items: center; justify-content: space-between;">
+        <div style="text-align: left;">
+          <div style="font-size: 0.72rem; color: #94a3b8; font-weight: 700; text-transform: uppercase;">Pass Price</div>
+          <div style="font-size: 1.25rem; font-weight: 900; color: #fde047;">3,000 ⭐ Stars</div>
+        </div>
+        <div style="text-align: right;">
+          <div style="font-size: 0.72rem; color: #94a3b8; font-weight: 700; text-transform: uppercase;">Your Stars</div>
+          <div id="activatePassUserStarsText" style="font-size: 1.15rem; font-weight: 900; color: #ffffff;">0 ⭐</div>
+        </div>
+      </div>
+
+      <!-- Description -->
+      <div style="font-size: 0.82rem; color: #cbd5e1; line-height: 1.45; margin-bottom: 1.25rem;">
+        Unlock all exclusive <b style="color: #facc15;">PASS track rewards</b> across all 500 levels! Golden locks will be opened instantly upon activation.
+      </div>
+
+      <!-- Buttons -->
+      <div style="display: flex; gap: 10px;">
+        <button type="button" onclick="closeActivatePassModal()" style="flex: 1; padding: 0.75rem 1rem; background: rgba(255, 255, 255, 0.08); border: 1.5px solid rgba(255, 255, 255, 0.2); border-radius: 12px; color: #94a3b8; font-weight: 800; font-size: 0.9rem; cursor: pointer;">
+          Cancel
+        </button>
+        <button type="button" id="btnConfirmActivatePass" onclick="confirmActivateSeasonPassWithStars()" style="flex: 2; padding: 0.75rem 1rem; background: linear-gradient(135deg, #facc15 0%, #eab308 50%, #ca8a04 100%); border: 1.5px solid #fef08a; border-radius: 12px; color: #422006; font-weight: 900; font-size: 0.92rem; cursor: pointer; box-shadow: 0 4px 16px rgba(245, 158, 11, 0.45);">
+          ⚡ Activate for 3,000 ⭐
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- LEADERBOARD USER / CONTENDER EDIT MODAL (Admin Direct Edit) -->
+  <div class="task-verify-modal-overlay" id="leaderboardUserEditModalOverlay" onclick="handleLeaderboardEditBackdrop(event)" style="display: none; position: fixed; inset: 0; background: rgba(3, 8, 22, 0.85); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); z-index: 10000; align-items: center; justify-content: center; padding: 1rem; box-sizing: border-box;">
+    <div class="roadmap-modal-card" onclick="event.stopPropagation()" style="background: linear-gradient(145deg, #0a1938 0%, #060f24 100%); border: 2px solid rgba(56, 189, 248, 0.45); border-radius: 20px; width: 100%; max-width: 440px; max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 16px 40px rgba(0, 0, 0, 0.8), 0 0 24px rgba(56, 189, 248, 0.25); overflow-y: auto; box-sizing: border-box; padding: 1.25rem;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid rgba(56, 189, 248, 0.2); padding-bottom: 0.75rem;">
+        <div>
+          <div style="font-weight: 900; font-size: 1.1rem; color: #38bdf8;">✏️ Edit Contender</div>
+          <div id="lbEditIdDisplay" style="font-size: 0.72rem; color: #94a3b8; font-family: monospace;">UID: usr_1</div>
+        </div>
+        <button type="button" onclick="closeLeaderboardUserEditModal()" style="background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); color: #ffffff; width: 30px; height: 30px; border-radius: 50%; font-size: 0.95rem; cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: 900;">✕</button>
+      </div>
+
+      <form id="leaderboardUserEditForm" onsubmit="handleSaveLeaderboardUser(event)" style="display: flex; flex-direction: column; gap: 0.75rem;">
+        <input type="hidden" id="lbEditUserId" value="" />
+
+        <div style="display: flex; align-items: center; gap: 0.75rem;">
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 3px;">
+            <div id="lbEditAvatarPreview" style="font-size: 1.8rem; line-height: 1;">⚡</div>
+            <input type="text" id="lbEditAvatarInput" maxlength="4" style="width: 48px; text-align: center; font-size: 1.1rem; padding: 3px; background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 6px; color: #fff;" oninput="document.getElementById('lbEditAvatarPreview').textContent = this.value || '⚡'" />
+          </div>
+          <div style="flex: 1;">
+            <label style="font-size: 0.72rem; color: #94a3b8; font-weight: 700;">Display Name *</label>
+            <input type="text" id="lbEditNameInput" required maxlength="30" style="width: 100%; box-sizing: border-box; background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 8px; padding: 0.5rem; color: #fff; font-weight: 700; margin-top: 3px;" />
+            <div id="lbEditNameDisplay" style="display: none;"></div>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+          <div>
+            <label style="font-size: 0.72rem; color: #38bdf8; font-weight: 700;">Leaderboard Tasks (🎯) *</label>
+            <input type="number" id="lbEditEventTasks" min="0" required style="width: 100%; box-sizing: border-box; background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 8px; padding: 0.45rem; color: #fff; font-weight: 700; margin-top: 3px;" />
+          </div>
+          <div>
+            <label style="font-size: 0.72rem; color: #94a3b8; font-weight: 700;">Total Career Tasks (📋) *</label>
+            <input type="number" id="lbEditTotalTasks" min="0" required style="width: 100%; box-sizing: border-box; background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 8px; padding: 0.45rem; color: #fff; font-weight: 700; margin-top: 3px;" />
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem;">
+          <div>
+            <label style="font-size: 0.72rem; color: #fbbf24; font-weight: 700;">Coins (🪙)</label>
+            <input type="number" id="lbEditCoins" min="0" step="50" required style="width: 100%; box-sizing: border-box; background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(251, 191, 36, 0.4); border-radius: 8px; padding: 0.45rem; color: #fbbf24; font-weight: 700; margin-top: 3px;" />
+          </div>
+          <div>
+            <label style="font-size: 0.72rem; color: #facc15; font-weight: 700;">Stars (⭐)</label>
+            <input type="number" id="lbEditStars" min="0" step="1" required style="width: 100%; box-sizing: border-box; background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(250, 204, 21, 0.4); border-radius: 8px; padding: 0.45rem; color: #facc15; font-weight: 700; margin-top: 3px;" />
+          </div>
+          <div>
+            <label style="font-size: 0.72rem; color: #c084fc; font-weight: 700;">Tickets (🎟️)</label>
+            <input type="number" id="lbEditTickets" min="0" step="1" required style="width: 100%; box-sizing: border-box; background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(192, 132, 252, 0.4); border-radius: 8px; padding: 0.45rem; color: #c084fc; font-weight: 700; margin-top: 3px;" />
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+          <div>
+            <label style="font-size: 0.72rem; color: #94a3b8; font-weight: 700;">Level Tier</label>
+            <select id="lbEditLevelSelect" style="width: 100%; box-sizing: border-box; background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 8px; padding: 0.45rem; color: #fff; font-weight: 700; margin-top: 3px;">
+              <option value="LVL 1 • NOVICE">LVL 1 • Novice</option>
+              <option value="LVL 2 • CADET">LVL 2 • Cadet</option>
+              <option value="LVL 3 • SPECIALIST">LVL 3 • Specialist</option>
+              <option value="LVL 5 • TASK MASTER">LVL 5 • Task Master</option>
+              <option value="LVL 10 • CHAMPION">LVL 10 • Champion</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size: 0.72rem; color: #94a3b8; font-weight: 700;">Account Status</label>
+            <select id="lbEditStatusSelect" style="width: 100%; box-sizing: border-box; background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 8px; padding: 0.45rem; color: #fff; font-weight: 700; margin-top: 3px;">
+              <option value="active">Active Player 🟢</option>
+              <option value="inactive">Inactive Player ⚪</option>
+              <option value="suspended">Suspended 🔴</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 0.75rem; border-top: 1px solid rgba(56, 189, 248, 0.2); padding-top: 0.75rem;">
+          <button type="button" onclick="closeLeaderboardUserEditModal()" style="padding: 0.55rem 0.95rem; background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 8px; color: #e2e8f0; font-weight: 700; cursor: pointer;">Cancel</button>
+          <button type="submit" style="padding: 0.55rem 1.15rem; background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); border: none; border-radius: 8px; color: #ffffff; font-weight: 800; cursor: pointer; box-shadow: 0 4px 12px rgba(2, 132, 199, 0.4);">Save &amp; Recalculate ✓</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- ======================================================================
+       8. JAVASCRIPT: 500 LEVELS ENGINE, REAL-TIME DATA & CLAIM LOGIC
+       ====================================================================== -->
+  <script>
+    // Game State (Max Level 5000)
+    const MAX_TASK_PASS_LEVEL = 5000;
+
+    // Calculate target tasks required for any given level (1 task = 1 level with its winning prize)
+    function getTargetForLevel(level) {
+      return 1;
+    }
+
+    // Custom Game SVG Icons matching the reference Coin Sack / Ticket / Star style
+    const TASK_PASS_SVGS = {
+      coin: `<svg viewBox="0 0 64 64" width="52" height="52" style="width: 52px; height: 52px; display: block;">
+      <defs>
+        <radialGradient id="coinGrad" cx="35%" cy="30%" r="65%">
+          <stop offset="0%" stop-color="#fff59d"/>
+          <stop offset="35%" stop-color="#facc15"/>
+          <stop offset="70%" stop-color="#eab308"/>
+          <stop offset="100%" stop-color="#ca8a04"/>
+        </radialGradient>
+        <linearGradient id="coinRim" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#fef08a"/>
+          <stop offset="100%" stop-color="#854d0e"/>
+        </linearGradient>
+        <linearGradient id="coinInner" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#fef9c3"/>
+          <stop offset="50%" stop-color="#f59e0b"/>
+          <stop offset="100%" stop-color="#b45309"/>
+        </linearGradient>
+      </defs>
+      <circle cx="32" cy="32" r="27" fill="url(#coinGrad)" stroke="#111318" stroke-width="3.5"/>
+      <circle cx="32" cy="32" r="21" fill="url(#coinInner)" stroke="url(#coinRim)" stroke-width="2.5"/>
+      <polygon points="32,18 35.5,26 44,27 37.5,33 39.5,41.5 32,37 24.5,41.5 26.5,33 20,27 28.5,26" fill="#fffbeb" stroke="#b45309" stroke-width="1.5"/>
+      <path d="M16 26 A20 20 0 0 1 40 14" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" opacity="0.85"/>
+    </svg>`,
+      coinBag: `<svg viewBox="0 0 64 64" width="52" height="52" style="width: 52px; height: 52px; display: block;">
+      <defs>
+        <radialGradient id="coinGrad" cx="35%" cy="30%" r="65%">
+          <stop offset="0%" stop-color="#fff59d"/>
+          <stop offset="35%" stop-color="#facc15"/>
+          <stop offset="70%" stop-color="#eab308"/>
+          <stop offset="100%" stop-color="#ca8a04"/>
+        </radialGradient>
+        <linearGradient id="coinRim" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#fef08a"/>
+          <stop offset="100%" stop-color="#854d0e"/>
+        </linearGradient>
+        <linearGradient id="coinInner" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#fef9c3"/>
+          <stop offset="50%" stop-color="#f59e0b"/>
+          <stop offset="100%" stop-color="#b45309"/>
+        </linearGradient>
+      </defs>
+      <circle cx="32" cy="32" r="27" fill="url(#coinGrad)" stroke="#111318" stroke-width="3.5"/>
+      <circle cx="32" cy="32" r="21" fill="url(#coinInner)" stroke="url(#coinRim)" stroke-width="2.5"/>
+      <polygon points="32,18 35.5,26 44,27 37.5,33 39.5,41.5 32,37 24.5,41.5 26.5,33 20,27 28.5,26" fill="#fffbeb" stroke="#b45309" stroke-width="1.5"/>
+      <path d="M16 26 A20 20 0 0 1 40 14" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" opacity="0.85"/>
+    </svg>`,
+      ticket: `<svg viewBox="0 0 64 64" width="52" height="52" style="width: 52px; height: 52px; display: block;">
+      <defs>
+        <linearGradient id="ticketGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#ff4d4d"/>
+          <stop offset="45%" stop-color="#ef4444"/>
+          <stop offset="100%" stop-color="#b91c1c"/>
+        </linearGradient>
+        <linearGradient id="ticketInnerGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#fef08a"/>
+          <stop offset="100%" stop-color="#f59e0b"/>
+        </linearGradient>
+      </defs>
+      <g transform="rotate(-8 32 32)">
+        <path d="M10 18 H54 V27 A5 5 0 0 0 54 37 V46 H10 V37 A5 5 0 0 0 10 27 Z" fill="url(#ticketGrad)" stroke="#111318" stroke-width="3.5" stroke-linejoin="round"/>
+        <rect x="18" y="24" width="28" height="16" rx="4" fill="url(#ticketInnerGrad)" stroke="#111318" stroke-width="2.5"/>
+        <polygon points="32,26 34,30.5 38.5,31 35,34 36,38.5 32,36 28,38.5 29,34 25.5,31 30,30.5" fill="#dc2626"/>
+        <path d="M14 21 H50" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity="0.65"/>
+      </g>
+    </svg>`,
+      star: `<svg viewBox="0 0 64 64" width="52" height="52" style="width: 52px; height: 52px; display: block;">
+      <defs>
+        <radialGradient id="starGlow" cx="40%" cy="35%" r="65%">
+          <stop offset="0%" stop-color="#ffffff"/>
+          <stop offset="25%" stop-color="#fef08a"/>
+          <stop offset="60%" stop-color="#facc15"/>
+          <stop offset="100%" stop-color="#eab308"/>
+        </radialGradient>
+        <linearGradient id="starShade" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#f59e0b"/>
+          <stop offset="100%" stop-color="#b45309"/>
+        </linearGradient>
+      </defs>
+      <polygon points="32,6 40,22 57,24 44.5,36 47.5,53 32,44.5 16.5,53 19.5,36 7,24 24,22"
+        fill="url(#starGlow)" stroke="#111318" stroke-width="3.8" stroke-linejoin="round"/>
+      <polygon points="32,13 37.5,23.5 48.5,25 40,33 42,44.5 32,39 22,44.5 24,33 15.5,25 26.5,23.5"
+        fill="#fef08a" stroke="#ca8a04" stroke-width="1.5" stroke-linejoin="round"/>
+      <polygon points="32,18 35,25 42,26 36.5,31 38,38 32,34.5 26,38 27.5,31 22,26 29,25"
+        fill="#ffffff" opacity="0.9"/>
+    </svg>`
+    };
+
+    // Determine exact reward for a given level (500-Level Task Pass matching Excel up to 5,000 Levels):
+    // - Odd levels (1, 3, 5, 7, 9, 11...): 1000 + floor((level-1)/10)*100 Coins 🪙
+    // - Even non-tenth levels (2, 4, 6, 8, 12...): 5 + floor((level-1)/10)*5 Tickets 🎟️
+    // - Tenth levels (10, 20, 30... 5000): 100 + (floor(level/10)-1)*25 Stars ⭐
+    function getLevelReward(level) {
+      level = parseInt(level, 10);
+      if (isNaN(level) || level < 1) level = 1;
+      const target = getTargetForLevel(level);
+      const taskWord = target === 1 ? 'Task' : 'Tasks';
+      const bandIndex = Math.floor((level - 1) / 10);
+
+      if (level % 10 === 0) {
+        const milestoneIndex = Math.floor(level / 10);
+        const isPassBuyer = (typeof state !== 'undefined' && state.passActivated) || (typeof localStorage !== 'undefined' && localStorage.getItem("season_6_pass_activated") === "true");
+        const starAmount = (level >= 500 && isPassBuyer) ? 5000 : (100 + (milestoneIndex - 1) * 25);
+        return {
+          type: 'stars',
+          amount: starAmount,
+          iconSvg: TASK_PASS_SVGS.star,
+          tag: `Level ${level} / ${MAX_TASK_PASS_LEVEL} • Target: ${target} ${taskWord}`,
+          title: (level >= 500 && isPassBuyer)
+            ? `Complete ${target} ${taskWord} to Win 5,000 Stars ⭐ (Pass Buyer Exclusive)`
+            : `Complete ${target} ${taskWord} to Win ${starAmount.toLocaleString()} Stars ⭐`,
+          popText: `+${starAmount.toLocaleString()} STARS ⭐`
+        };
+      } else if (level % 2 === 0) {
+        const ticketAmount = 5 + bandIndex * 5;
+        return {
+          type: 'tickets',
+          amount: ticketAmount,
+          iconSvg: TASK_PASS_SVGS.ticket || TASK_PASS_SVGS.coin,
+          tag: `Level ${level} • Target: ${target} ${taskWord}`,
+          title: `Complete ${target} ${taskWord} to Win ${ticketAmount.toLocaleString()} Tickets 🎟️`,
+          popText: `+${ticketAmount.toLocaleString()} TICKETS 🎟️`
+        };
+      } else {
+        const coinAmount = 1000 + bandIndex * 100;
+        return {
+          type: 'coins',
+          amount: coinAmount,
+          iconSvg: TASK_PASS_SVGS.coin,
+          tag: `Level ${level} • Target: ${target} ${taskWord}`,
+          title: `Complete ${target} ${taskWord} to Win ${coinAmount.toLocaleString()} Coins 🪙`,
+          popText: `+${coinAmount.toLocaleString()} COINS 🪙`
+        };
+      }
+    }
+
+    function spawnFloatingPop(x, y, text, isLevelUp = false) {
+      const pop = document.createElement('div');
+      pop.className = `floating-pop game-outline ${isLevelUp ? 'text-2xl' : 'text-xl'}`;
+      pop.textContent = text;
+      pop.style.left = `${x}px`;
+      pop.style.top = `${y}px`;
+      document.body.appendChild(pop);
+      setTimeout(() => pop.remove(), 700);
+    }
+
+    function syncTaskPassFromCompletedTasks() {
+      try {
+        const rawCompleted = localStorage.getItem("task_game_completed_tasks");
+        const completedTasks = rawCompleted ? JSON.parse(rawCompleted) : {};
+        let totalCompleted = Object.keys(completedTasks).length;
+        const directCompleted = parseInt(localStorage.getItem("task_pass_total_completed") || "0", 10);
+        if (directCompleted > totalCompleted) {
+          totalCompleted = directCompleted;
+        }
+
+        // 1 task = 1 level completed (Task Pass starts from zero)
+        const currentLevel = Math.min(MAX_TASK_PASS_LEVEL, totalCompleted);
+
+        localStorage.setItem("task_pass_level", currentLevel.toString());
+        localStorage.setItem("task_pass_current_tasks", "0");
+        localStorage.setItem("task_pass_total_completed", totalCompleted.toString());
+        if (typeof state !== 'undefined') {
+          state.currentLevel = currentLevel;
+          state.completedTasks = totalCompleted;
+        }
+      } catch (e) {}
+    }
+
+    function renderTaskPassLevelsStrip(currentLevel, totalCompleted) {
+      const strip = document.getElementById("taskPassLevelsStrip") || document.getElementById("horizontalLevelTrack");
+      if (!strip) return;
+
+      const effectiveLvl = Math.max(1, currentLevel);
+      const targetMilestone = Math.min(MAX_TASK_PASS_LEVEL, Math.ceil(effectiveLvl / 10) * 10);
+      const startLevel = targetMilestone - 9;
+      const endLevel = targetMilestone;
+      let html = "";
+
+      for (let lvl = startLevel; lvl <= endLevel; lvl++) {
+        const reward = getLevelReward(lvl);
+        const isCompleted = lvl <= totalCompleted && totalCompleted > 0;
+        const isCurrent = lvl === currentLevel;
+        const isMilestone = (lvl % 10 === 0);
+
+        let cardClass = "level-strip-card";
+        if (isMilestone) cardClass += " milestone";
+        if (isCompleted) cardClass += " completed";
+        if (isCurrent) cardClass += " active";
+
+        let statusText = "🔒 1 Task";
+        let statusClass = "status-locked";
+
+        if (isCompleted) {
+          statusText = "✓ Won";
+          statusClass = "status-won";
+        } else if (isCurrent && currentLevel > 0) {
+          statusText = "🎯 0/1 Task";
+          statusClass = "status-current";
+        }
+
+        const emoji = reward.type === "stars" ? "⭐" : (reward.type === "tickets" ? "🎟️" : "🪙");
+
+        html += `
+          <div class="${cardClass}" id="levelStripCard_${lvl}" title="Level ${lvl}: Complete 1 task to win ${reward.amount} ${emoji}">
+            <span class="level-strip-num">Lvl ${lvl}</span>
+            <div class="level-strip-reward">
+              <span>${emoji}</span>
+              <span>${reward.amount}</span>
+            </div>
+            <span class="level-strip-status ${statusClass}">${statusText}</span>
+          </div>
+        `;
+      }
+
+      strip.innerHTML = html;
+
+      // Auto-scroll strip to center the active current level card
+      setTimeout(() => {
+        const activeEl = document.getElementById(`levelStripCard_${currentLevel}`);
+        const container = document.getElementById("taskPassLevelsStripContainer") || (strip.parentElement);
+        if (activeEl && container) {
+          const scrollPos = activeEl.offsetLeft - (container.clientWidth / 2) + (activeEl.clientWidth / 2);
+          container.scrollTo({ left: Math.max(0, scrollPos), behavior: "smooth" });
+        }
+      }, 100);
+    }
+
+    function updateTaskPassUI() {
+      syncTaskPassFromCompletedTasks();
+      const currentLevel = parseInt(localStorage.getItem("task_pass_level") || (typeof state !== 'undefined' ? state.currentLevel : 0) || "0", 10);
+      const totalCompleted = parseInt(localStorage.getItem("task_pass_total_completed") || (typeof state !== 'undefined' ? state.completedTasks : 0) || "0", 10);
+
+      const cycleTaskTag = document.getElementById("cycleTaskTag");
+      const nextMilestoneLabel = document.getElementById("nextMilestoneLabel");
+
+      const reward = getLevelReward(Math.max(1, currentLevel));
+
+      // Permanently show "All Levels 🏆" on milestone button
+      if (nextMilestoneLabel) nextMilestoneLabel.textContent = "All Levels 🏆";
+
+      // Top-left gold pill: show target progress out of 10
+      const effectiveLvl = Math.max(1, currentLevel);
+      const nextTenLevel = Math.min(MAX_TASK_PASS_LEVEL, Math.ceil(effectiveLvl / 10) * 10);
+      const startLevel = nextTenLevel - 9;
+      const completedInBlock = Math.max(0, Math.min(10, totalCompleted - (startLevel - 1)));
+      if (cycleTaskTag) cycleTaskTag.textContent = `${completedInBlock}/10`;
+
+      const levelNumText = document.getElementById("levelNumText");
+      const taskProgressBar = document.getElementById("taskProgressBar");
+      const taskCountText = document.getElementById("taskCountText");
+      const rewardBagSvg = document.getElementById("rewardBagSvg");
+      const rewardAmountText = document.getElementById("rewardAmountText");
+
+      if (levelNumText) levelNumText.textContent = currentLevel;
+      if (taskProgressBar) taskProgressBar.style.width = currentLevel === 0 ? "0%" : "30%";
+      if (taskCountText) taskCountText.textContent = currentLevel === 0 ? "0/1 Task" : "0/1 Task";
+      if (rewardBagSvg) rewardBagSvg.innerHTML = reward.iconSvg;
+      if (rewardAmountText) rewardAmountText.textContent = reward.amount;
+
+      // Render Horizontal Levels Strip: active 10-level target window
+      renderTaskPassLevelsStrip(currentLevel, totalCompleted);
+    }
+
+    // Advance Task Pass Progress upon verifying/claiming a task (1 task = 1 level with winning prize)
+    function advanceTaskPassProgress(clickX, clickY) {
+      let totalTasksCompleted = parseInt(localStorage.getItem("task_pass_total_completed") || localStorage.getItem("task_game_total_tasks_completed") || "0", 10);
+      totalTasksCompleted++;
+
+      const completedLevel = totalTasksCompleted;
+      const newLevel = Math.min(MAX_TASK_PASS_LEVEL, completedLevel + 1);
+
+      localStorage.setItem("task_pass_total_completed", totalTasksCompleted.toString());
+      localStorage.setItem("task_game_total_tasks_completed", totalTasksCompleted.toString());
+      localStorage.setItem("completed_tasks_count", totalTasksCompleted.toString());
+      localStorage.setItem("task_pass_level", newLevel.toString());
+      localStorage.setItem("task_pass_current_tasks", "0");
+
+      if (typeof state !== 'undefined') {
+        state.currentLevel = newLevel;
+        state.completedTasks = totalTasksCompleted;
+      }
+
+      // Award the winning prize for the completed level
+      const rewardWon = getLevelReward(completedLevel);
+
+      if (rewardWon.type === "stars") {
+        let curStars = parseInt(localStorage.getItem("task_game_stars") || localStorage.getItem("user_stars") || "0", 10);
+        curStars += rewardWon.amount;
+        localStorage.setItem("task_game_stars", curStars.toString());
+        localStorage.setItem("user_stars", curStars.toString());
+        if (typeof state !== 'undefined') state.stars = curStars;
+        if (window.userStars !== undefined) window.userStars = curStars;
+        const starDisplay = document.getElementById("userStarsDisplay") || document.getElementById("hudStars");
+        if (starDisplay) starDisplay.textContent = curStars.toLocaleString();
+      } else if (rewardWon.type === "tickets") {
+        let curTickets = parseInt(localStorage.getItem("task_user_tickets") || localStorage.getItem("user_tickets") || localStorage.getItem("task_game_tickets") || "0", 10);
+        curTickets += rewardWon.amount;
+        localStorage.setItem("task_user_tickets", curTickets.toString());
+        localStorage.setItem("user_tickets", curTickets.toString());
+        localStorage.setItem("task_game_tickets", curTickets.toString());
+        if (typeof state !== 'undefined') state.tickets = curTickets;
+        if (window.userTickets !== undefined) window.userTickets = curTickets;
+        const ticketDisplay = document.getElementById("userTicketsDisplay") || document.getElementById("hudTickets");
+        if (ticketDisplay) ticketDisplay.textContent = curTickets.toLocaleString();
+      } else {
+        let curCoins = parseInt(localStorage.getItem("task_game_coins") || localStorage.getItem("user_coins") || "0", 10);
+        curCoins += rewardWon.amount;
+        localStorage.setItem("task_game_coins", curCoins.toString());
+        localStorage.setItem("task_game_coins_alt", curCoins.toString());
+        localStorage.setItem("user_coins", curCoins.toString());
+        if (typeof state !== 'undefined') state.coins = curCoins;
+        if (window.userCoins !== undefined) window.userCoins = curCoins;
+        const coinDisplay = document.getElementById("userCoinsDisplay") || document.getElementById("hudCoins");
+        if (coinDisplay) coinDisplay.textContent = curCoins.toLocaleString();
+      }
+
+      const posX = clickX || (window.innerWidth / 2);
+      const posY = clickY || (window.innerHeight / 2);
+      spawnFloatingPop(posX, posY - 24, `LVL ${completedLevel} DONE! ${rewardWon.popText}`, true);
+
+      setTimeout(() => {
+        if (typeof updateHUD === "function") updateHUD();
+        updateTaskPassUI();
+      }, 450);
+
+      if (typeof updateHUD === "function") updateHUD();
+      updateTaskPassUI();
+
+      try {
+        const bc = new BroadcastChannel("nova_task_sync");
+        bc.postMessage({
+          type: "TASK_PASS_SYNC",
+          level: newLevel,
+          currentTasks: 0,
+          totalCompleted: totalTasksCompleted,
+          timestamp: Date.now()
+        });
+        bc.postMessage({
+          type: "BALANCES_UPDATED",
+          coins: parseInt(localStorage.getItem("task_game_coins") || "0", 10),
+          stars: parseInt(localStorage.getItem("task_game_stars") || "0", 10),
+          timestamp: Date.now()
+        });
+      } catch (e) {}
+
+      window.dispatchEvent(new CustomEvent('balance:changed'));
+
+      return {
+        levelCompleted: true,
+        completedLevel,
+        newLevel,
+        reward: rewardWon
+      };
+    }
+
+    let roadmapDisplayMax = 50;
+
+    function renderRoadmapLevels(maxLimit) {
+      const listContainer = document.getElementById("roadmapLevelsList");
+      if (!listContainer) return;
+
+      const currentLevel = parseInt(localStorage.getItem("task_pass_level") || (typeof state !== 'undefined' ? state.currentLevel : 1) || "1", 10);
+      const totalCompleted = parseInt(localStorage.getItem("task_pass_total_completed") || (typeof state !== 'undefined' ? state.completedTasks : 0) || "0", 10);
+      roadmapDisplayMax = Math.min(MAX_TASK_PASS_LEVEL, maxLimit || 50);
+
+      let listHtml = "";
+
+      for (let lvl = 1; lvl <= roadmapDisplayMax; lvl++) {
+        const reward = getLevelReward(lvl);
+        const isCompleted = lvl <= totalCompleted;
+        const isCurrent = lvl === currentLevel;
+        const isMilestone = (lvl % 10 === 0);
+
+        const emoji = reward.type === "stars" ? "⭐" : (reward.type === "tickets" ? "🎟️" : "🪙");
+        const rewardName = reward.type === "stars" ? "Stars" : (reward.type === "tickets" ? "Tickets" : "Coins");
+
+        let rowClass = "roadmap-level-row";
+        if (isMilestone) rowClass += " milestone-row";
+        if (isCompleted) rowClass += " completed-row";
+        if (isCurrent) rowClass += " active-row";
+
+        let statusBadge = `<span class="roadmap-status-badge status-locked">🔒 Locked</span>`;
+        if (isCompleted) {
+          statusBadge = `<span class="roadmap-status-badge status-won">✅ Won</span>`;
+        } else if (isCurrent) {
+          statusBadge = `<span class="roadmap-status-badge status-current">🎯 0/1 Task</span>`;
+        }
+
+        listHtml += `
+          <div class="${rowClass}" id="roadmapLevelItem_${lvl}">
+            <div class="roadmap-level-shield ${isCurrent ? "active-shield" : ""}">
+              <span class="shield-num">${lvl}</span>
+            </div>
+            <div class="roadmap-level-info">
+              <div class="roadmap-level-title">
+                <span>Level ${lvl}</span>
+                ${isMilestone ? "<span class='milestone-star-badge'>⭐ Target Milestone</span>" : ""}
+              </div>
+              <div class="roadmap-level-sub">Complete 1 Task &bull; Win <strong style="color: #fde047;">+${reward.amount.toLocaleString()} ${rewardName} ${emoji}</strong></div>
+            </div>
+            <div class="roadmap-level-right">
+              <div class="roadmap-level-reward-tag">
+                <span class="roadmap-reward-icon">${emoji}</span>
+                <span class="roadmap-reward-val">${reward.amount.toLocaleString()}</span>
+              </div>
+              ${statusBadge}
+            </div>
+          </div>
+        `;
+      }
+
+      if (roadmapDisplayMax < MAX_TASK_PASS_LEVEL) {
+        listHtml += `
+          <div style="text-align: center; padding: 12px 6px;">
+            <button type="button" onclick="loadMoreRoadmapLevels()" style="width: 100%; background: linear-gradient(135deg, rgba(56, 189, 248, 0.2) 0%, rgba(14, 165, 233, 0.2) 100%); border: 1.5px solid rgba(56, 189, 248, 0.45); color: #38bdf8; font-weight: 800; font-size: 0.85rem; padding: 10px 16px; border-radius: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;">
+              <span>⚡ Load Next 50 Levels (Showing ${roadmapDisplayMax} of 5,000)</span>
+            </button>
+          </div>
+        `;
+      }
+
+      listContainer.innerHTML = listHtml;
+    }
+
+    function loadMoreRoadmapLevels() {
+      renderRoadmapLevels(roadmapDisplayMax + 50);
+    }
+
+    function openTaskPassRoadmapModal(targetLevel) {
+      // Roadmap popup removed per user request
+      return false;
+    }
+
+    function closeTaskPassRoadmapModal() {
+      // Roadmap popup removed per user request
+      return false;
+    }
+
+    let passConfig = {};
+    try {
+      const rawCfg = localStorage.getItem("task_pass_config");
+      if (rawCfg) passConfig = JSON.parse(rawCfg);
+    } catch(e) {}
+
+    const MAX_TIERS = passConfig.totalLevels || 500;
+    let isPassClaimRunning = false;
+
+    // 20 Sponsored Links cycled repeatedly across the 50 milestone levels (each 10th level: Lvl 10, 20... 500)
+    const PASS_SPONSOR_LINKS = (typeof window.PASS_SPONSOR_LINKS_20 !== 'undefined' && Array.isArray(window.PASS_SPONSOR_LINKS_20))
+      ? window.PASS_SPONSOR_LINKS_20
+      : [
+          "https://uplcm.com/4/12169313",
+          "https://uplcm.com/4/12169338",
+          "https://uplcm.com/4/12169321",
+          "https://uplcm.com/4/12169324",
+          "https://uplcm.com/4/12169336",
+          "https://uplcm.com/4/11834220",
+          "https://uplcm.com/4/12169323",
+          "https://uplcm.com/4/11616083",
+          "https://uplcm.com/4/12169326",
+          "https://uplcm.com/4/12169318",
+          "https://uplcm.com/4/12169312",
+          "https://uplcm.com/4/12169337",
+          "https://uplcm.com/4/12169328",
+          "https://uplcm.com/4/12169335",
+          "https://uplcm.com/4/12169339",
+          "https://uplcm.com/4/12169319",
+          "https://uplcm.com/4/10684653",
+          "https://uplcm.com/4/12169325",
+          "https://uplcm.com/4/12169330",
+          "https://uplcm.com/4/11834221"
+        ];
+
+    // Repeated across 50 milestone tiers (500 total levels / 10 = 50 milestones)
+    function getPassSponsorLinkForTier(tier) {
+      if (tier % 10 !== 0) return null;
+      const milestoneIndex = Math.floor(tier / 10) - 1; // 0 to 49
+      const linkIndex = ((milestoneIndex % PASS_SPONSOR_LINKS.length) + PASS_SPONSOR_LINKS.length) % PASS_SPONSOR_LINKS.length;
+      return PASS_SPONSOR_LINKS[linkIndex];
+    }
+
+    // Game state with initial zero reset
+    try {
+      if (!localStorage.getItem('balance_zero_reset_v4')) {
+        localStorage.setItem('task_game_coins', '0');
+        localStorage.setItem('user_coins', '0');
+        localStorage.setItem('task_game_coins_alt', '0');
+        localStorage.setItem('task_game_stars', '0');
+        localStorage.setItem('user_stars', '0');
+        localStorage.setItem('task_user_tickets', '0');
+        localStorage.setItem('user_tickets', '0');
+        localStorage.setItem('task_game_tickets', '0');
+        localStorage.setItem('balance_zero_reset_v4', 'true');
+      }
+    } catch(e) {}
+
+    try {
+      if (!localStorage.getItem("task_pass_zero_v3")) {
+        const curLvl = localStorage.getItem("task_pass_level");
+        if (!curLvl || curLvl === "4" || curLvl === "1") {
+          localStorage.setItem("task_pass_level", "0");
+          localStorage.setItem("task_pass_total_completed", "0");
+        }
+        localStorage.setItem("task_pass_zero_v3", "true");
+      }
+    } catch(e) {}
+
+    const state = {
+      coins: parseInt(localStorage.getItem("task_game_coins") || localStorage.getItem("user_coins") || "0", 10),
+      stars: parseInt(localStorage.getItem("task_game_stars") || localStorage.getItem("user_stars") || "0", 10),
+      tickets: parseInt(localStorage.getItem("task_user_tickets") || localStorage.getItem("user_tickets") || localStorage.getItem("task_game_tickets") || "0", 10),
+      currentLevel: parseInt(localStorage.getItem("task_pass_level") || "0", 10),
+      completedTasks: parseInt(localStorage.getItem("task_pass_total_completed") || "0", 10),
+      passActivated: (localStorage.getItem("season_6_pass_activated") === "true"),
+      claimed: {}
+    };
+
+    try {
+      const rawClaimed = localStorage.getItem("season_battle_pass_claimed");
+      if (rawClaimed) state.claimed = JSON.parse(rawClaimed);
+    } catch(e) {}
+
+    // Deterministic Reward Calculator for Level 1 to Level 500
+    // Excel Rewards -> Premium Pass (requires Pass activation, not free)
+    // Smaller Base Rewards -> Free Pass (each level claimed by watching an ad with "Watch Ad 📺" button)
+    function getTierReward(tier) {
+      const bandIndex = Math.floor((tier - 1) / 10);
+      let free = null;
+      let pass = null;
+
+      if (tier % 10 === 0) {
+        const milestoneIndex = Math.floor(tier / 10);
+        // Level 500 and after: 5,000 Stars for pass buyers only!
+        const excelStars = (tier >= 500) ? 5000 : (100 + (milestoneIndex - 1) * 25);
+        const freeStars = Math.floor((100 + (milestoneIndex - 1) * 25) / 2); // 50 at 10, 62 at 20...
+        free = {
+          tier: tier,
+          type: "stars",
+          emoji: "⭐",
+          title: freeStars.toLocaleString() + " Stars",
+          coins: 0,
+          stars: freeStars,
+          tickets: 0,
+          desc: "Level " + tier + " Star Milestone: +" + freeStars.toLocaleString() + " Stars! (Watch Ad 📺)"
+        };
+        pass = {
+          tier: tier,
+          type: "stars",
+          emoji: "⭐",
+          title: excelStars.toLocaleString() + " Stars",
+          coins: 0,
+          stars: excelStars,
+          tickets: 0,
+          desc: (tier >= 500)
+            ? "VIP Grand Finale Tier " + tier + ": +5,000 Stars! (Exclusive to Pass Buyers)"
+            : ("VIP Milestone Pass Tier " + tier + ": +" + excelStars.toLocaleString() + " Stars! (Premium Pass)")
+        };
+      } else if (tier % 2 === 0) {
+        // Excel 500-level ticket reward (even levels) -> PREMIUM PASS
+        const excelTickets = 5 + bandIndex * 5;
+        const freeTickets = Math.max(1, Math.floor(excelTickets / 2)); // 2 at 2-8, 5 at 12-18...
+        free = {
+          tier: tier,
+          type: "tickets",
+          emoji: "🎟️",
+          title: freeTickets.toLocaleString() + " Tickets",
+          coins: 0,
+          stars: 0,
+          tickets: freeTickets,
+          desc: "Level " + tier + " Free Reward: +" + freeTickets.toLocaleString() + " Tickets! (Watch Ad 📺)"
+        };
+        pass = {
+          tier: tier,
+          type: "tickets",
+          emoji: "🎟️",
+          title: excelTickets.toLocaleString() + " Tickets",
+          coins: 0,
+          stars: 0,
+          tickets: excelTickets,
+          desc: "VIP Pass Tier " + tier + ": +" + excelTickets.toLocaleString() + " Event & Spin Tickets! (Premium Pass)"
+        };
+      } else {
+        // Excel 500-level coin reward (odd levels) -> PREMIUM PASS
+        const excelCoins = 1000 + bandIndex * 100;
+        const freeCoins = Math.round(excelCoins / 2); // 500 at 1-9, 550 at 11-19...
+        free = {
+          tier: tier,
+          type: "coins",
+          emoji: "🪙",
+          title: freeCoins.toLocaleString() + " Coins",
+          coins: freeCoins,
+          stars: 0,
+          tickets: 0,
+          desc: "Level " + tier + " Free Reward: +" + freeCoins.toLocaleString() + " Coins! (Watch Ad 📺)"
+        };
+        pass = {
+          tier: tier,
+          type: "coins",
+          emoji: "🪙",
+          title: excelCoins.toLocaleString() + " Coins",
+          coins: excelCoins,
+          stars: 0,
+          tickets: 0,
+          desc: "VIP Pass Tier " + tier + ": +" + excelCoins.toLocaleString() + " Gold Coins! (Premium Pass)"
+        };
+      }
+
+      return { tier: tier, free: free, pass: pass };
+    }
+
+    // Update Header HUD matching Home page Image 2
+    function updateHUD() {
+      state.coins = parseInt(localStorage.getItem("task_game_coins") || localStorage.getItem("user_coins") || "0", 10);
+      state.stars = parseInt(localStorage.getItem("task_game_stars") || localStorage.getItem("user_stars") || "0", 10);
+      state.tickets = parseInt(localStorage.getItem("task_user_tickets") || localStorage.getItem("user_tickets") || localStorage.getItem("task_game_tickets") || "0", 10);
+
+      const c = document.getElementById("hudCoins");
+      const s = document.getElementById("hudStars");
+      const t = document.getElementById("hudTickets");
+      if (c) c.textContent = state.coins.toLocaleString();
+      if (s) s.textContent = state.stars.toLocaleString();
+      if (t) t.textContent = state.tickets.toLocaleString();
+
+      const savedName = localStorage.getItem("player_username");
+      const nameEl = document.getElementById("headerUserName") || document.querySelector(".user-name");
+      if (nameEl) {
+        nameEl.textContent = (savedName && savedName !== 'NovaEarner' && savedName !== 'Player') ? savedName : 'patel gamer';
+      }
+
+      const avatarEl = document.getElementById("headerUserAvatar") || document.querySelector(".user-avatar");
+      if (avatarEl) {
+        avatarEl.textContent = localStorage.getItem("player_avatar") || '⚡';
+      }
+
+      const rankEl = document.getElementById("userRankDisplay") || document.getElementById("headerPassLevel");
+      if (rankEl) {
+        rankEl.textContent = "RANK #1";
+      }
+
+      const streakEl = document.getElementById("userStreakDisplay");
+      if (streakEl) {
+        const streakDays = localStorage.getItem("user_streak_days");
+        streakEl.textContent = streakDays ? ("Day " + streakDays) : "Day 4";
+      }
+    }
+
+    // Keep HUD in sync with any central balance updates
+    window.addEventListener('storage', (e) => {
+      if (['task_game_coins', 'user_coins', 'task_game_stars', 'user_stars', 'task_user_tickets', 'user_tickets', 'task_game_tickets'].includes(e.key)) {
+        updateHUD();
+      }
+    });
+    window.addEventListener('balance:changed', () => updateHUD());
+    try {
+      const bSync = new BroadcastChannel('balance_sync_channel');
+      bSync.onmessage = () => updateHUD();
+    } catch(e) {}
+
+    // Update Top Task Pass Card
+    function updateTaskPassWidget() {
+      const lvlText = document.getElementById("levelNumText");
+      const progressBar = document.getElementById("taskProgressBar");
+      const countText = document.getElementById("taskCountText");
+      const cycleTag = document.getElementById("cycleTaskTag");
+      const curStatusText = document.getElementById("currentLevelStatusText");
+
+      const currentLvl = state.currentLevel;
+      if (lvlText) lvlText.textContent = currentLvl;
+
+      // 10-level cycle block & sum of target tasks
+      const nextTen = Math.min(MAX_TIERS, Math.max(10, Math.ceil((currentLvl || 1) / 10) * 10));
+      const startTen = nextTen - 9;
+      const completedInBlock = Math.max(0, Math.min(10, state.completedTasks - (startTen - 1)));
+
+      if (cycleTag) cycleTag.textContent = completedInBlock + "/10";
+      if (curStatusText) curStatusText.textContent = `Active: Level ${currentLvl} • Milestone: Lvl ${nextTen}`;
+
+      // Progress bar fill (Level 1 to Level 10 sum of target tasks)
+      const pct = (completedInBlock / 10) * 100;
+      if (progressBar) progressBar.style.width = (currentLvl === 0 && state.completedTasks === 0) ? "0%" : `${pct}%`;
+      if (countText) {
+        if (completedInBlock >= 10) {
+          countText.innerHTML = `<span>10/10 Done! ✓</span> <button type="button" onclick="watchAdForExtraPassLevel()" style="background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%); color:#fff; border:none; padding:2px 8px; border-radius:999px; font-size:0.62rem; font-weight:800; cursor:pointer; margin-left:6px; box-shadow:0 2px 6px rgba(0,0,0,0.4); text-transform:none;">Watch Ad +1 Lvl 📺</button>`;
+        } else {
+          countText.textContent = `${completedInBlock} / 10 Tasks`;
+        }
+      }
+
+      // Update Target 10-Level Badge on right side of loading bar
+      const targetLvlText = document.getElementById("targetLevelNumText");
+      if (targetLvlText) targetLvlText.textContent = nextTen;
+      const targetBadge = document.getElementById("targetLevelBadge") || document.getElementById("rewardPreviewBox");
+      const milestoneStars = nextTen * 10;
+      if (targetBadge) {
+        targetBadge.title = `Milestone Target: Level ${nextTen} • Reward: ${milestoneStars.toLocaleString()} ⭐ (Tap to View Roadmap)`;
+      }
+      const rewardAmountEl = document.getElementById("rewardAmountText");
+      if (rewardAmountEl) rewardAmountEl.textContent = `${milestoneStars.toLocaleString()}`;
+
+      // Render Horizontal Level Cards Strip (Level-wise claiming of rewards)
+      renderHorizontalLevelTrack();
+
+      // Pass Toggle Button & Dot
+      const btn = document.getElementById("btnTogglePass");
+      const heroPassBtn = document.getElementById("btnToggleSeasonPass");
+      const dot = document.getElementById("passActiveDot");
+      const label = document.getElementById("passBtnLabel");
+      if (state.passActivated) {
+        if (btn) {
+          btn.className = "btn-toggle-pass-green";
+          btn.title = "Season Pass Active";
+        }
+        if (heroPassBtn) {
+          heroPassBtn.className = "btn-toggle-pass-green";
+          heroPassBtn.textContent = "Pass Active ✓";
+          heroPassBtn.style.background = "linear-gradient(135deg, #10b981 0%, #059669 100%)";
+          heroPassBtn.style.color = "#ffffff";
+          heroPassBtn.style.borderColor = "#34d399";
+        }
+        if (label) label.textContent = "Pass Active ✓";
+        if (dot) dot.classList.remove("hidden");
+      } else {
+        if (btn) {
+          btn.className = "btn-toggle-pass-amber";
+          btn.title = "Activate Season Pass for 3,000 Stars";
+        }
+        if (heroPassBtn) {
+          heroPassBtn.className = "btn-toggle-pass-amber";
+          heroPassBtn.textContent = "⚡ Activate Pass (3,000 ⭐)";
+          heroPassBtn.style.background = "linear-gradient(135deg, #facc15 0%, #d97706 100%)";
+          heroPassBtn.style.color = "#422006";
+          heroPassBtn.style.borderColor = "#facc15";
+        }
+        if (label) label.textContent = "Activate Pass (3,000 ⭐)";
+        if (dot) dot.classList.add("hidden");
+      }
+    }
+
+    const PASS_STAR_PRICE = 3000;
+
+    function openActivatePassModal() {
+      if (state.passActivated) {
+        showToast("⚡ Season Pass is already active! ✓");
+        return;
+      }
+      const modal = document.getElementById("activatePassModalOverlay");
+      const userStarsEl = document.getElementById("activatePassUserStarsText");
+      const confirmBtn = document.getElementById("btnConfirmActivatePass");
+
+      const currentStars = parseInt(localStorage.getItem("task_game_stars") || localStorage.getItem("user_stars") || "0", 10) || 0;
+      if (userStarsEl) userStarsEl.textContent = currentStars.toLocaleString() + " ⭐";
+
+      if (confirmBtn) {
+        if (currentStars < PASS_STAR_PRICE) {
+          confirmBtn.disabled = true;
+          confirmBtn.style.opacity = "0.55";
+          confirmBtn.style.cursor = "not-allowed";
+          confirmBtn.textContent = "Need 3,000 ⭐ Stars";
+        } else {
+          confirmBtn.disabled = false;
+          confirmBtn.style.opacity = "1";
+          confirmBtn.style.cursor = "pointer";
+          confirmBtn.textContent = "⚡ Activate for 3,000 ⭐";
+        }
+      }
+
+      if (modal) {
+        modal.style.display = "flex";
+        setTimeout(() => modal.classList.add("active"), 10);
+      } else {
+        confirmActivateSeasonPassWithStars();
+      }
+    }
+
+    function closeActivatePassModal() {
+      const modal = document.getElementById("activatePassModalOverlay");
+      if (modal) {
+        modal.classList.remove("active");
+        setTimeout(() => { modal.style.display = "none"; }, 150);
+      }
+    }
+
+    function confirmActivateSeasonPassWithStars() {
+      const confirmBtn = document.getElementById("btnConfirmActivatePass");
+      if (confirmBtn && confirmBtn.disabled) return;
+      if (confirmBtn) {
+        confirmBtn.disabled = true;
+        confirmBtn.classList.add("loading");
+        setTimeout(() => {
+          confirmBtn.disabled = false;
+          confirmBtn.classList.remove("loading");
+        }, 1500);
+      }
+
+      if (state.passActivated) {
+        closeActivatePassModal();
+        showToast("⚡ Season Pass is already active! ✓");
+        return;
+      }
+
+      const currentStars = parseInt(localStorage.getItem("task_game_stars") || localStorage.getItem("user_stars") || "0", 10) || 0;
+      if (currentStars < PASS_STAR_PRICE) {
+        closeActivatePassModal();
+        showToast("❌ Need 3,000 ⭐ Stars to activate Pass! (You have: " + currentStars.toLocaleString() + " ⭐)");
+        alert("❌ Insufficient Stars!\n\nSeason Battle Pass costs 3,000 ⭐ Stars.\nYou currently have " + currentStars.toLocaleString() + " ⭐ Stars.\n\nEarn more Stars from Star Tasks or the Shop to activate the Pass!");
+        return;
+      }
+
+      // Deduct exactly 3000 stars
+      const newStars = currentStars - PASS_STAR_PRICE;
+      state.stars = newStars;
+      localStorage.setItem("task_game_stars", newStars.toString());
+      localStorage.setItem("user_stars", newStars.toString());
+      if (window.firebaseSync && typeof window.firebaseSync.setStars === 'function') {
+        window.firebaseSync.setStars(newStars);
+      }
+
+      state.passActivated = true;
+      localStorage.setItem("season_6_pass_activated", "true");
+
+      closeActivatePassModal();
+      updateHUD();
+      updateTaskPassWidget();
+      renderTiers();
+
+      showToast("🎉 Season Pass Activated for 3,000 ⭐! All Golden Locks Opened!");
+
+      try {
+        const bc = new BroadcastChannel('nova_task_sync');
+        bc.postMessage({ type: 'PASS_ACTIVATED', timestamp: Date.now() });
+        bc.postMessage({ type: 'BALANCES_UPDATED', coins: state.coins, stars: newStars, tickets: state.tickets, timestamp: Date.now() });
+        bc.close();
+      } catch(e) {}
+
+      try {
+        const bSync = new BroadcastChannel('balance_sync_channel');
+        bSync.postMessage({ type: 'BALANCE_UPDATED', coins: state.coins, stars: newStars, tickets: state.tickets });
+        bSync.close();
+      } catch(e) {}
+
+      window.dispatchEvent(new Event('balance:changed'));
+    }
+
+    // Toggle Pass Activation / Open Purchase Modal (Costs 3,000 Stars)
+    function toggleActivatePass() {
+      if (state.passActivated) {
+        showToast("⚡ Season Pass is already active! ✓");
+        return;
+      }
+      openActivatePassModal();
+    }
+
+    // Watch Ad to advance +1 extra task & level when 10-level block is completed
+    function watchAdForExtraPassLevel() {
+      const runAd = (typeof window.runRewardedAd === 'function')
+        ? window.runRewardedAd()
+        : (typeof show_11677609 === 'function'
+            ? show_11677609('pop')
+            : (typeof window.show_11677609 === 'function' ? window.show_11677609('pop') : Promise.resolve({ success: true })));
+
+      Promise.resolve(runAd).finally(() => {
+        state.completedTasks += 1;
+        state.currentLevel = Math.min(MAX_TIERS, state.currentLevel + 1);
+        localStorage.setItem("task_pass_total_completed", state.completedTasks.toString());
+        localStorage.setItem("task_pass_level", state.currentLevel.toString());
+        if (typeof window.saveCurrentProfileToFirestore === 'function') window.saveCurrentProfileToFirestore();
+        updateTaskPassWidget();
+        renderTiers();
+        showToast("🎉 Ad Watched! +1 Task & Level Completed!");
+      });
+    }
+    window.watchAdForExtraPassLevel = watchAdForExtraPassLevel;
+
+    // Render Horizontal Level Strip using Home Page Classes (.level-strip-card, .level-strip-num, .level-strip-reward, .level-strip-status)
+    function renderHorizontalLevelTrack() {
+      const container = document.getElementById("horizontalLevelTrack");
+      if (!container) return;
+      const currentLvl = state.currentLevel;
+
+      // Show levels window around current (from max(1, currentLvl - 2) to min(MAX_TIERS, currentLvl + 6))
+      const start = Math.max(1, currentLvl - 2);
+      const end = Math.min(MAX_TIERS, currentLvl + 6);
+
+      let html = "";
+      for (let lvl = start; lvl <= end; lvl++) {
+        const isCurrent = lvl === currentLvl;
+        const isWon = lvl < currentLvl;
+        const rewardData = getTierReward(lvl);
+        const rewardItem = (lvl % 2 === 0) ? rewardData.pass : rewardData.free;
+        const icon = rewardItem.emoji || "⭐";
+        const amount = rewardItem.coins || rewardItem.stars || rewardItem.tickets || 100;
+
+        let cardClass = "level-strip-card";
+        if (isCurrent) cardClass += " active";
+        else if (isWon) cardClass += " completed";
+        if (lvl % 10 === 0) cardClass += " milestone";
+
+        let statusHtml = "";
+        if (isWon) {
+          statusHtml = '<span class="level-strip-status status-won">✓ Won</span>';
+        } else if (isCurrent) {
+          statusHtml = '<span class="level-strip-status status-current">🎯 0/1 Task</span>';
+        } else {
+          statusHtml = '<span class="level-strip-status status-locked">🔒 1 Task</span>';
+        }
+
+        html += '<div class="' + cardClass + '" onclick="scrollToTier(' + lvl + ')" title="Jump to Level ' + lvl + '">' +
+          '<span class="level-strip-num">Lvl ' + lvl + '</span>' +
+          '<div class="level-strip-reward">' +
+            '<span>' + icon + '</span>' +
+            '<span>' + amount + '</span>' +
+          '</div>' +
+          statusHtml +
+        '</div>';
+      }
+      container.innerHTML = html;
+    }
+
+    // Build and Render all 500 Tiers
+    function renderTiers() {
+      const container = document.getElementById("tiersContainer");
+      if (!container) return;
+
+      const currentLvl = state.currentLevel;
+      let html = "";
+
+      for (let t = 1; t <= MAX_TIERS; t++) {
+        const data = getTierReward(t);
+        const reached = t <= currentLvl;
+        const isCurrent = t === currentLvl;
+
+        const freeKey = t + "_free";
+        const passKey = t + "_pass";
+        const freeClaimed = !!state.claimed[freeKey];
+        const passClaimed = !!state.claimed[passKey];
+
+        let rowClass = "tier-row";
+        if (reached) rowClass += " reached";
+        if (isCurrent) rowClass += " current";
+
+        // Free card status pill
+        let freePill = '<span class="card-status-pill pill-locked">🔒 Level ' + t + '</span>';
+        if (freeClaimed) {
+          freePill = '<span class="card-status-pill pill-claimed">Claimed ✓</span>';
+        } else if (reached) {
+          freePill = '<span class="card-status-pill pill-ad">Watch Ad 📺</span>';
+        }
+
+        // Pass card status pill
+        let passPill = '<span class="card-status-pill pill-locked">🔒 Lock</span>';
+        if (passClaimed) {
+          passPill = '<span class="card-status-pill pill-claimed">Claimed ✓</span>';
+        } else if (reached && state.passActivated) {
+          passPill = '<span class="card-status-pill pill-claim">Claim ⭐</span>';
+        } else if (reached && !state.passActivated) {
+          passPill = '<span class="card-status-pill pill-locked">🔒 Need Pass</span>';
+        }
+
+        const passCardExtraClass = (!state.passActivated) ? " locked-padlock" : "";
+
+        html += '<div class="' + rowClass + '" id="tier-row-' + t + '" data-tier="' + t + '">' +
+          '<!-- Free Card (Left) -->' +
+          '<div class="pass-card card-free-tier" onclick="handleCardClick(' + t + ', \'free\')" title="Tier ' + t + ' Free Reward">' +
+            '<div style="font-size: 0.72rem; color: #7dd3fc; font-weight: 800;">Tier ' + t + '</div>' +
+            '<div style="font-size: 2.1rem; line-height: 1; margin: 4px 0; filter: drop-shadow(0 3px 6px rgba(0,0,0,0.5));">' + data.free.emoji + '</div>' +
+            '<div style="font-size: 0.75rem; font-weight: 700; color: #ffffff; line-height: 1.2;">' + data.free.title + '</div>' +
+            freePill +
+          '</div>' +
+
+          '<!-- Tier Badge (Center) -->' +
+          '<div class="tier-badge" id="badge-' + t + '">' + t + '</div>' +
+
+          '<!-- Pass Card (Right) -->' +
+          '<div class="pass-card card-pass-tier' + passCardExtraClass + '" onclick="handleCardClick(' + t + ', \'pass\')" title="Tier ' + t + ' Pass Reward">' +
+            '<div style="font-size: 0.72rem; color: #fde047; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 4px;">' +
+              '<span>PASS</span>' +
+              ((!state.passActivated) ? '<span style="font-size: 0.65rem;">🔒</span>' : '') +
+            '</div>' +
+            '<div style="font-size: 2.1rem; line-height: 1; margin: 4px 0; filter: drop-shadow(0 3px 6px rgba(0,0,0,0.5));">' + data.pass.emoji + '</div>' +
+            '<div style="font-size: 0.75rem; font-weight: 700; color: #ffffff; line-height: 1.2;">' + data.pass.title + '</div>' +
+            passPill +
+          '</div>' +
+        '</div>';
+      }
+
+      container.innerHTML = html;
+      alignRail();
+    }
+
+    // Align checkered progress rail
+    function alignRail() {
+      try {
+        const wrap = document.getElementById("passTrackWrap");
+        const badgeCurrent = document.getElementById("badge-" + state.currentLevel);
+        const fill = document.getElementById("progressFill");
+
+        if (wrap && badgeCurrent && fill) {
+          const wrapRect = wrap.getBoundingClientRect();
+          const badgeRect = badgeCurrent.getBoundingClientRect();
+          const centerY = (badgeRect.top + badgeRect.height / 2) - wrapRect.top;
+          fill.style.height = Math.max(0, Math.round(centerY)) + "px";
+        }
+      } catch(e) {}
+    }
+
+    // Direct Reward Claiming (Popup modal removed per user request)
+    let activeModalReward = null;
+
+    function handleCardClick(tier, track) {
+      const data = getTierReward(tier);
+      const reward = (track === "free") ? data.free : data.pass;
+      const reached = tier <= state.currentLevel;
+      const key = tier + "_" + track;
+      const isClaimed = !!state.claimed[key];
+
+      if (isClaimed) {
+        showToast("Tier " + tier + " " + (track === "free" ? "Free" : "Pass") + " reward already claimed! ✓");
+        return;
+      }
+
+      if (!reached) {
+        showToast("🔒 Reach Level " + tier + " first to unlock this reward!");
+        return;
+      }
+
+      if (track === "pass" && !state.passActivated) {
+        showToast("⚡ Season Pass required (Price: 3,000 ⭐)!");
+        openActivatePassModal();
+        return;
+      }
+
+      if (isPassClaimRunning) return;
+
+      const performRewardAward = () => {
+        if (state.claimed[key]) return;
+        state.claimed[key] = true;
+        localStorage.setItem("season_battle_pass_claimed", JSON.stringify(state.claimed));
+
+        let c = parseInt(localStorage.getItem("task_game_coins") || localStorage.getItem("user_coins") || localStorage.getItem("task_game_coins_alt") || "0", 10) || 0;
+        let s = parseInt(localStorage.getItem("task_game_stars") || localStorage.getItem("user_stars") || "0", 10) || 0;
+        let tk = parseInt(localStorage.getItem("task_user_tickets") || localStorage.getItem("user_tickets") || localStorage.getItem("task_game_tickets") || "0", 10) || 0;
+
+        if (reward.coins) {
+          c += reward.coins;
+          localStorage.setItem("task_game_coins", c.toString());
+          localStorage.setItem("task_game_coins_alt", c.toString());
+          localStorage.setItem("user_coins", c.toString());
+          if (window.firebaseSync && typeof window.firebaseSync.setCoins === 'function') {
+            window.firebaseSync.setCoins(c);
+          }
+        }
+        if (reward.stars) {
+          s += reward.stars;
+          localStorage.setItem("task_game_stars", s.toString());
+          localStorage.setItem("user_stars", s.toString());
+          if (window.firebaseSync && typeof window.firebaseSync.setStars === 'function') {
+            window.firebaseSync.setStars(s);
+          }
+        }
+        if (reward.tickets) {
+          tk += reward.tickets;
+          localStorage.setItem("task_user_tickets", tk.toString());
+          localStorage.setItem("user_tickets", tk.toString());
+          localStorage.setItem("task_game_tickets", tk.toString());
+          if (window.firebaseSync && typeof window.firebaseSync.setTickets === 'function') {
+            window.firebaseSync.setTickets(tk);
+          }
+        }
+
+        state.coins = c;
+        state.stars = s;
+        state.tickets = tk;
+
+        updateHUD();
+        renderTiers();
+        renderHorizontalLevelTrack();
+        showToast("🎉 Claimed " + reward.title + "!");
+
+        try {
+          const cardEl = document.getElementById("tier-row-" + tier);
+          if (cardEl) {
+            const rect = cardEl.getBoundingClientRect();
+            spawnFloatingPop(rect.left + rect.width / 2, rect.top + 20, "+" + reward.title, false);
+          }
+        } catch(e) {}
+
+        try {
+          const bc = new BroadcastChannel('nova_task_sync');
+          bc.postMessage({ type: 'PASS_REWARD_CLAIMED', tier, track, timestamp: Date.now() });
+          bc.postMessage({ type: 'BALANCES_UPDATED', coins: c, stars: s, tickets: tk, timestamp: Date.now() });
+          bc.close();
+        } catch(e) {}
+
+        try {
+          const bSync = new BroadcastChannel('balance_sync_channel');
+          bSync.postMessage({ type: 'BALANCE_UPDATED', coins: c, stars: s, tickets: tk });
+          bSync.close();
+        } catch(e) {}
+
+        window.dispatchEvent(new Event('balance:changed'));
+      };
+
+      if (track === "free") {
+        isPassClaimRunning = true;
+        showToast("Watching ad to claim Tier " + tier + " reward 📺...");
+
+        // Open direct sponsor ad link for all free tier claims
+        if (typeof openSponsorAdLink === 'function') {
+          openSponsorAdLink(tier);
+        } else if (typeof window.openSponsorAdLink === 'function') {
+          window.openSponsorAdLink(tier);
+        } else {
+          const sponsorLink = (typeof getPassSponsorLinkForTier === 'function' ? getPassSponsorLinkForTier(tier) : null) || PASS_SPONSOR_LINKS[((tier - 1) % PASS_SPONSOR_LINKS.length)];
+          if (sponsorLink) {
+            try {
+              const adTab = window.open(sponsorLink, '_blank');
+              if (adTab) {
+                try { adTab.blur(); window.focus(); } catch (e) {}
+              }
+            } catch(err) {
+              console.warn('[Pass Ad] Sponsor link open note:', err);
+            }
+          }
+        }
+
+        const runAd = (typeof window.runRewardedAd === 'function')
+          ? window.runRewardedAd()
+          : (typeof show_11677609 === 'function'
+              ? show_11677609('pop')
+              : (typeof window.show_11677609 === 'function' ? window.show_11677609('pop') : Promise.resolve({ success: true })));
+
+        Promise.resolve(runAd)
+          .then(() => {
+            performRewardAward();
+          })
+          .catch((err) => {
+            console.warn('[Pass Ad] Ad notice:', err);
+            performRewardAward();
+          })
+          .finally(() => {
+            isPassClaimRunning = false;
+          });
+      } else {
+        // Paid / VIP Pass rewards: Direct claim
+        performRewardAward();
+      }
+    }
+
+    function closeRewardModal() {
+      // No-op (modal removed)
+    }
+
+    function claimCurrentModalReward() {
+      // No-op (modal removed)
+    }
+
+    // Scroll helpers
+    function scrollToCurrentLevel() {
+      scrollToTier(state.currentLevel);
+    }
+
+    function scrollToTier(tier) {
+      tier = Math.max(1, Math.min(MAX_TIERS, tier));
+      const el = document.getElementById("tier-row-" + tier);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        highlightJumpPill(tier);
+      }
+    }
+
+    function highlightJumpPill(tier) {
+      document.querySelectorAll(".jump-pill").forEach(p => p.classList.remove("active"));
+    }
+
+    function openRoadmapModal() {
+      if (typeof openTaskPassRoadmapModal === "function") openTaskPassRoadmapModal();
+      else showToast("500-Level Battle Pass active! Scroll down to explore all 500 tiers.");
+    }
+
+    function navigateHome() {
+      showToast("Returning to Home...");
+      setTimeout(() => { window.location.href = "../home/index.html"; }, 300);
+    }
+
+    let toastTimer = null;
+    function showToast(msg) {
+      const toast = document.getElementById("arcadeToast");
+      const text = document.getElementById("toastMsg");
+      if (!toast || !text) return;
+      text.textContent = msg;
+      toast.style.opacity = "1";
+      toast.style.transform = "translateX(-50%) translateY(0)";
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        toast.style.opacity = "0";
+        toast.style.transform = "translateX(-50%) translateY(12px)";
+      }, 2500);
+    }
+
+    // Initialize
+    window.addEventListener("DOMContentLoaded", () => {
+      updateHUD();
+      if (typeof updateTaskPassUI === "function") updateTaskPassUI();
+      updateTaskPassWidget();
+      renderTiers();
+
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get("action") === "roadmap") {
+          setTimeout(() => {
+            if (typeof openTaskPassRoadmapModal === "function") openTaskPassRoadmapModal();
+          }, 350);
+        }
+      } catch(e) {}
+
+      setTimeout(() => {
+        scrollToCurrentLevel();
+      }, 400);
+    });
+
+    // Real-Time Cross-Window Synchronization (Admin Pass Edits)
+    window.addEventListener("storage", (e) => {
+      if (e.key === "task_pass_config" || e.key === "season_6_pass_activated" || e.key === "task_pass_level" || e.key === "task_pass_total_completed") {
+        try {
+          const rawCfg = localStorage.getItem("task_pass_config");
+          if (rawCfg) passConfig = JSON.parse(rawCfg);
+          state.currentLevel = parseInt(localStorage.getItem("task_pass_level") || "0", 10);
+          state.completedTasks = parseInt(localStorage.getItem("task_pass_total_completed") || "0", 10);
+          state.passActivated = (localStorage.getItem("season_6_pass_activated") === "true");
+        } catch(e) {}
+        updateHUD();
+        updateTaskPassWidget();
+        renderTiers();
+      }
+    });
+
+    try {
+      const bc = new BroadcastChannel("nova_task_sync");
+      bc.onmessage = (msg) => {
+        updateHUD();
+        if (msg && msg.data && (msg.data.type === "PASS_ACTIVATED" || msg.data.type === "PASS_CONFIG_UPDATED" || msg.data.type === "TASKS_RESTORED" || msg.data.type === "TASKS_UPDATED" || msg.data.type === "TASK_COMPLETED" || msg.data.type === "BALANCES_UPDATED")) {
+          try {
+            if (typeof syncTaskPassFromCompletedTasks === 'function') syncTaskPassFromCompletedTasks();
+            const rawCfg = localStorage.getItem("task_pass_config");
+            if (rawCfg) passConfig = JSON.parse(rawCfg);
+            state.currentLevel = parseInt(localStorage.getItem("task_pass_level") || "0", 10);
+            state.completedTasks = parseInt(localStorage.getItem("task_pass_total_completed") || "0", 10);
+            state.passActivated = (localStorage.getItem("season_6_pass_activated") === "true");
+          } catch(e) {}
+          updateHUD();
+          updateTaskPassWidget();
+          renderTiers();
+        }
+      };
+    } catch(e) {}
+
+    function updatePassHeroSeasonTimer() {
+      const el = document.getElementById("passHeroSeasonCountdown");
+      if (!el) return;
+      let endTime = parseInt(localStorage.getItem('season_pass_end_timestamp') || '0', 10);
+      if (!endTime || isNaN(endTime) || endTime <= Date.now()) {
+        endTime = Date.now() + 21 * 86400000;
+        localStorage.setItem('season_pass_end_timestamp', endTime.toString());
+      }
+      const diff = endTime - Date.now();
+      if (diff <= 0) {
+        el.textContent = "⏱️ Season Ended";
+        return;
+      }
+      const totalSec = Math.floor(diff / 1000);
+      const d = Math.floor(totalSec / 86400);
+      const h = Math.floor((totalSec % 86400) / 3600);
+      const m = Math.floor((totalSec % 3600) / 60);
+      const s = totalSec % 60;
+      el.textContent = `⏱️ Season Ends: ${d}d ${h.toString().padStart(2, '0')}h ${m.toString().padStart(2, '0')}m ${s.toString().padStart(2, '0')}s`;
+    }
+    setInterval(updatePassHeroSeasonTimer, 1000);
+    setTimeout(updatePassHeroSeasonTimer, 50);
+
+    window.addEventListener("resize", alignRail);
+    window.handleCardClick = handleCardClick;
+    window.claimCurrentModalReward = claimCurrentModalReward;
+    window.closeRewardModal = closeRewardModal;
+    window.getTierReward = getTierReward;
+    window.state = state;
+    window.openTaskPassRoadmapModal = openTaskPassRoadmapModal;
+    window.closeTaskPassRoadmapModal = closeTaskPassRoadmapModal;
+    window.loadMoreRoadmapLevels = loadMoreRoadmapLevels;
+    window.renderRoadmapLevels = renderRoadmapLevels;
+    window.advanceTaskPassProgress = advanceTaskPassProgress;
+    window.updateTaskPassUI = updateTaskPassUI;
+    window.renderTaskPassLevelsStrip = renderTaskPassLevelsStrip;
+    window.openActivatePassModal = openActivatePassModal;
+    window.closeActivatePassModal = closeActivatePassModal;
+    window.confirmActivateSeasonPassWithStars = confirmActivateSeasonPassWithStars;
+    window.toggleActivatePass = toggleActivatePass;
+    window.updateTaskPassWidget = updateTaskPassWidget;
+    window.getLevelReward = getLevelReward;
+  </script>
+  <script src="script.js"></script>
+</body>
+</html>

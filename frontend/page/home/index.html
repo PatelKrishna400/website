@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!-- Fredoka Google Font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Task Earner — Webtask</title>
+  <script>
+    // Initialize local defaults, resetting all balances (coins, stars, tickets) to 0
+    try {
+      if (!localStorage.getItem('balance_zero_reset_v4')) {
+        localStorage.setItem('task_game_coins', '0');
+        localStorage.setItem('user_coins', '0');
+        localStorage.setItem('task_game_coins_alt', '0');
+        localStorage.setItem('task_game_stars', '0');
+        localStorage.setItem('user_stars', '0');
+        localStorage.setItem('task_user_tickets', '0');
+        localStorage.setItem('user_tickets', '0');
+        localStorage.setItem('task_game_tickets', '0');
+        localStorage.setItem('balance_zero_reset_v4', 'true');
+      }
+
+      if (localStorage.getItem('task_game_coins') === null) localStorage.setItem('task_game_coins', '0');
+      if (localStorage.getItem('task_game_stars') === null) localStorage.setItem('task_game_stars', '0');
+      if (localStorage.getItem('user_coins') === null) localStorage.setItem('user_coins', '0');
+      if (localStorage.getItem('user_stars') === null) localStorage.setItem('user_stars', '0');
+      if (localStorage.getItem('task_user_tickets') === null) localStorage.setItem('task_user_tickets', '0');
+      if (localStorage.getItem('user_tickets') === null) localStorage.setItem('user_tickets', '0');
+      if (localStorage.getItem('task_game_tickets') === null) localStorage.setItem('task_game_tickets', '0');
+      if (localStorage.getItem('completed_tasks_count') === null) localStorage.setItem('completed_tasks_count', '0');
+      if (localStorage.getItem('ads_watched_count') === null) localStorage.setItem('ads_watched_count', '0');
+
+      if (!localStorage.getItem('task_game_legacy_mock_cleared')) {
+        localStorage.removeItem('task_game_stars_rating');
+        const existingName = localStorage.getItem('player_username');
+        if (!existingName || existingName.toLowerCase().includes('nova') || existingName === 'Demo User') {
+          localStorage.setItem('player_username', 'Player');
+        }
+        if (!localStorage.getItem('player_avatar')) {
+          localStorage.setItem('player_avatar', '⚡');
+        }
+        localStorage.setItem('task_game_legacy_mock_cleared', 'true');
+      }
+    } catch (e) {}
+  </script>
+  <link rel="dns-prefetch" href="//libtl.com">
+  <!-- Rewarded Ads SDK -->
+  <script
+    async
+    src="//libtl.com/sdk.js"
+    data-zone="11677609"
+    data-sdk="show_11677609">
+  </script>
+  <script src="../../ad-service.js"></script>
+  <!-- Firebase SDK & Analytics Connection -->
+  <script type="module" src="../../firebase-config.js"></script>
+  <link rel="stylesheet" href="style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Titan+One&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <!-- Mobile View Screen Shell -->
+  <div class="mobile-container">
+    
+    <!-- Top Header Bar -->
+    <header class="home-header">
+      <div class="header-user">
+        <div class="user-avatar">⚡</div>
+        <div class="user-meta">
+          <span class="user-name">Task Earner</span>
+          <span class="user-level" id="userRankDisplay">RANK #1</span>
+        </div>
+      </div>
+      <div class="header-pills">
+        <div class="coin-pill" id="coinPill" title="Total Coin Balance • Tap to manage" onclick="window.openBalanceManageModal && window.openBalanceManageModal('coins')">
+          <span>🪙</span>
+          <span class="coin-value" id="userCoinsDisplay">0</span>
+        </div>
+        <div class="star-pill" id="starPill" title="Total Star Balance • Tap to manage" onclick="window.openBalanceManageModal && window.openBalanceManageModal('stars')">
+          <span>⭐</span>
+          <span class="star-value" id="userStarsDisplay">0</span>
+        </div>
+        <div class="streak-pill" id="streakPill" title="Daily Streak Rewards • Tap to open" onclick="openDailyStreakModal()">
+          <span class="streak-logo">🔥</span>
+          <span class="streak-value" id="userStreakDisplay">Day 1</span>
+          <span class="streak-badge-dot" id="streakNotificationDot" style="display: none;"></span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Page Content (Tasks) -->
+    <main class="page-content">
+
+      <!-- Sticky Task Controls: Event Banner + Category Switcher Tabs Stay In Place On Scroll -->
+      <div class="sticky-task-controls" id="stickyTaskControls">
+
+        <!-- Vertical Task Category Hub Cards (Common Tasks -> Coin Tasks -> Star Tasks -> Pro Tasks -> Ultra Tasks) -->
+        <div class="task-category-hub" id="taskCategoryHub">
+          
+          <!-- 1. Common Tasks Card (Light Blue) -->
+          <div class="task-hub-card hub-card-common" id="hubCardCommon" onclick="openTaskCategoryPage('common')" role="button" tabindex="0" title="Click to open Common Tasks">
+            <div class="hub-card-left">
+              <div class="hub-card-icon-wrap common-glow">
+                <span class="hub-card-icon">📋</span>
+              </div>
+              <div class="hub-card-info">
+                <div class="hub-card-title-row">
+                  <span class="hub-card-title">Common Tasks</span>
+                  <span class="hub-card-badge common-badge"><span id="commonTasksCount">0</span> Available</span>
+                </div>
+                <div class="hub-card-sub">Standard missions • Free entry • Win 50 Tickets &amp; Coins</div>
+              </div>
+            </div>
+            <div class="hub-card-right">
+              <span class="hub-card-arrow common-arrow">Open ➜</span>
+            </div>
+          </div>
+
+          <!-- 2. Coin Tasks Card (Deep Blue) -->
+          <div class="task-hub-card hub-card-coin" id="hubCardCoin" onclick="openTaskCategoryPage('simple')" role="button" tabindex="0" title="Click to open Coin Tasks">
+            <div class="hub-card-left">
+              <div class="hub-card-icon-wrap coin-glow">
+                <span class="hub-card-icon">🪙</span>
+              </div>
+              <div class="hub-card-info">
+                <div class="hub-card-title-row">
+                  <span class="hub-card-title">Coin Tasks</span>
+                  <span class="hub-card-badge coin-badge"><span id="simpleTasksCount">0</span> Available</span>
+                </div>
+                <div class="hub-card-sub">Cost 100 Tickets • Win 150 Coins • Levels 1–5,000</div>
+              </div>
+            </div>
+            <div class="hub-card-right">
+              <span class="hub-card-arrow coin-arrow">Open ➜</span>
+            </div>
+          </div>
+
+          <!-- 3. Star Tasks Card (Below Common Tasks) -->
+          <div class="task-hub-card hub-card-star" id="hubCardStar" onclick="openTaskCategoryPage('premium')" role="button" tabindex="0" title="Click to open Star Tasks">
+            <div class="hub-card-left">
+              <div class="hub-card-icon-wrap star-glow">
+                <span class="hub-card-icon">⭐</span>
+              </div>
+              <div class="hub-card-info">
+                <div class="hub-card-title-row">
+                  <span class="hub-card-title">Star Tasks</span>
+                  <span class="hub-card-badge star-badge"><span id="premiumTasksCount">0</span> VIP</span>
+                </div>
+                <div class="hub-card-sub">VIP High Bounty • Exclusive star missions &amp; rewards</div>
+              </div>
+            </div>
+            <div class="hub-card-right">
+              <span class="hub-card-vip-pill" id="hubCardVipStatus">👑 VIP</span>
+              <span class="hub-card-arrow star-arrow">Open ➜</span>
+            </div>
+          </div>
+
+          <!-- 4. Pro Tasks Card (Silver Themed) -->
+          <div class="task-hub-card hub-card-pro" id="hubCardPro" onclick="openTaskCategoryPage('pro')" role="button" tabindex="0" title="Click to open Pro Tasks">
+            <div class="hub-card-left">
+              <div class="hub-card-icon-wrap pro-glow">
+                <span class="hub-card-icon">💎</span>
+              </div>
+              <div class="hub-card-info">
+                <div class="hub-card-title-row">
+                  <span class="hub-card-title">Pro Tasks</span>
+                  <span class="hub-card-badge pro-badge"><span id="proTasksCount">0</span> Elite</span>
+                </div>
+                <div class="hub-card-sub">Limited-time event missions • Dual coin &amp; ticket unlock</div>
+              </div>
+            </div>
+            <div class="hub-card-right">
+              <span class="hub-card-event-timer" id="hubProTimerBadge" style="background: rgba(203, 213, 225, 0.15); border: 1px solid rgba(203, 213, 225, 0.4); color: #f1f5f9; padding: 2px 7px; border-radius: 999px; font-size: 0.68rem; font-weight: 800;">⏱️ Event</span>
+              <span class="hub-card-arrow pro-arrow">Open ➜</span>
+            </div>
+          </div>
+
+          <!-- 5. Ultra Tasks Card (Below Pro Tasks) -->
+          <div class="task-hub-card hub-card-ultra" id="hubCardUltra" onclick="openTaskCategoryPage('ultra')" role="button" tabindex="0" title="Click to open Ultra Tasks">
+            <div class="hub-card-left">
+              <div class="hub-card-icon-wrap ultra-glow">
+                <span class="hub-card-icon">⚡</span>
+              </div>
+              <div class="hub-card-info">
+                <div class="hub-card-title-row">
+                  <span class="hub-card-title">Ultra Tasks</span>
+                  <span class="hub-card-badge ultra-badge"><span id="ultraTasksCount">0</span> Ultra</span>
+                </div>
+                <div class="hub-card-sub">Mega bounties • High-value missions • Instant Coins &amp; Stars</div>
+              </div>
+            </div>
+            <div class="hub-card-right">
+              <span class="hub-card-ultra-pill" id="hubUltraTimerBadge">⚡ ULTRA</span>
+              <span class="hub-card-arrow ultra-arrow">Open ➜</span>
+            </div>
+          </div>
+
+          <!-- 6. Quiz Tasks Card (Emerald / Cyan Themed) -->
+          <div class="task-hub-card hub-card-quiz" id="hubCardQuiz" onclick="openTaskCategoryPage('quiz')" role="button" tabindex="0" title="Click to open Quiz Tasks">
+            <div class="hub-card-left">
+              <div class="hub-card-icon-wrap quiz-glow">
+                <span class="hub-card-icon">🧠</span>
+              </div>
+              <div class="hub-card-info">
+                <div class="hub-card-title-row">
+                  <span class="hub-card-title">Quiz Tasks</span>
+                  <span class="hub-card-badge quiz-badge"><span id="quizTasksCount">10</span> Quiz</span>
+                </div>
+                <div class="hub-card-sub">Answer trivia &amp; knowledge questions • Win instant Coins &amp; Tickets</div>
+              </div>
+            </div>
+            <div class="hub-card-right">
+              <span class="hub-card-quiz-pill" id="hubQuizTimerBadge">🧠 QUIZ</span>
+              <span class="hub-card-arrow quiz-arrow">Open ➜</span>
+            </div>
+          </div>
+
+        </div>
+
+      </div><!-- /.sticky-task-controls -->
+
+      <!-- Dedicated Task Category Page View (Opens when Coin, Star, or Pro card is clicked) -->
+      <div class="task-category-page-view" id="taskCategoryPageView" style="display: none;">
+        
+        <!-- Sticky Category Top Bar with Back Button, Title, and Real-Time Balance -->
+        <div class="cat-page-top-bar" id="catPageTopBar">
+          <button type="button" class="cat-page-back-btn" onclick="closeTaskCategoryPage()" aria-label="Back to Task Categories">
+            <span class="cat-back-arrow">←</span>
+            <span class="cat-back-text">All Categories</span>
+          </button>
+          <div class="cat-page-header-info">
+            <span class="cat-page-header-icon" id="catPageHeaderIcon">🪙</span>
+            <span class="cat-page-header-title" id="catPageHeaderTitle">Coin Tasks</span>
+          </div>
+          <div class="cat-page-header-balance" id="catPageHeaderBalance">
+            <span class="cat-balance-pill" id="catBalancePill">🪙 0</span>
+          </div>
+        </div>
+
+        <!-- Category Specific Top Banner (VIP Pass Status / Event Countdown / Summary) -->
+        <div id="catPageBannerContainer">
+          <!-- Dynamically populated by renderTasks -->
+        </div>
+
+        <!-- Tasks List inside this Category -->
+        <div class="tasks-list" id="tasksList">
+          <!-- Dynamically loaded & synchronized with Admin in real time -->
+        </div>
+
+      </div>
+
+    </main>
+
+    <!-- Below Menu Bar (Shop, Leaderboard, Home Center, Wallet, Profile) -->
+    <nav class="below-menu-bar" id="belowMenuBar" aria-label="Bottom Navigation">
+      
+      <!-- 1. Shop Page Link (Beside Leaderboard) -->
+      <a href="../shop/index.html" class="below-menu-item" id="menuShop" title="Shop">
+        <div class="menu-icon-wrap">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <path d="M16 10a4 4 0 0 1-8 0"></path>
+          </svg>
+        </div>
+        <span class="menu-label">Shop</span>
+      </a>
+
+      <!-- 2. Leaderboard Page Link -->
+      <a href="../leaderboard/index.html" class="below-menu-item" id="menuLeaderboard" title="Leaderboard">
+        <div class="menu-icon-wrap">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path>
+            <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path>
+            <path d="M4 22h16"></path>
+            <path d="M10 14.66V17c0 .55-.45 1-1 1H7c-.55 0-1-.45-1-1v-2.34"></path>
+            <path d="M18 14.66V17c0 .55-.45 1-1 1h-2c-.55 0-1-.45-1-1v-2.34"></path>
+            <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"></path>
+          </svg>
+        </div>
+        <span class="menu-label">Ranks</span>
+      </a>
+
+      <!-- 3. Home Page Link (Center Elevated) -->
+      <a href="../home/index.html" class="below-menu-item center-home-btn active" id="menuHome" title="Home">
+        <div class="center-home-icon-wrap">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+            <polyline points="9 22 9 12 15 12 15 22"></polyline>
+          </svg>
+        </div>
+        <span class="menu-label">Home</span>
+      </a>
+
+      <!-- 4. Wallet Page Link (Between Home and Profile) -->
+      <a href="../wallet/index.html" class="below-menu-item" id="menuWallet" title="Wallet">
+        <div class="menu-icon-wrap">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"></path>
+            <path d="M3 5v14a2 2 0 0 0 2 2h16v-5"></path>
+            <path d="M18 12a2 2 0 0 0 0 4h4v-4Z"></path>
+          </svg>
+        </div>
+        <span class="menu-label">Wallet</span>
+      </a>
+
+      <!-- 5. Profile Page Link -->
+      <a href="../profile/index.html" class="below-menu-item" id="menuProfile" title="Profile">
+        <div class="menu-icon-wrap">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path>
+            <circle cx="12" cy="7" r="4"></circle>
+          </svg>
+        </div>
+        <span class="menu-label">Profile</span>
+      </a>
+
+    </nav>
+
+  </div>
+
+    <!-- VIP Premium Pass Subscription Modal (3 Plans with Discount Percentages) -->
+  <div class="vip-modal-overlay" id="vipSubscriptionModal" style="display: none;" onclick="handleVipModalBackdropClick(event)">
+    <div class="vip-modal-box" onclick="event.stopPropagation()">
+      <button type="button" class="vip-modal-close-btn" onclick="closeSubscriptionModal()" aria-label="Close modal">✕</button>
+
+      <div class="vip-modal-header">
+        <div class="vip-crown-badge">👑</div>
+        <h2 class="vip-modal-title">VIP Premium Pass</h2>
+        <p class="vip-modal-subtitle">Unlock exclusive high-reward Premium Tasks &amp; claim huge star bounties!</p>
+        
+        <div class="vip-balance-strip">
+          <span>Your Balance:</span>
+          <span class="vip-balance-pill">⭐ <b id="vipModalUserStars">0</b> Stars</span>
+        </div>
+      </div>
+
+      <div class="vip-plans-grid">
+        
+        <!-- PLAN 1: 500 Stars for 15 Days (5 tasks / day) -->
+        <div class="vip-plan-card" id="plan15Days">
+          <div class="plan-discount-badge starter-badge">STARTER PASS • LEVEL 1 &amp; 2 • 5 TASKS/DAY</div>
+          <div class="plan-card-body">
+            <div class="plan-duration-badge">15 DAYS</div>
+            <div class="plan-price-row">
+              <span class="plan-price-stars">500</span>
+              <span class="plan-price-unit">⭐ Stars</span>
+            </div>
+            <div class="plan-rate-sub">~33 ⭐ / day</div>
+            <div class="plan-task-limit-pill starter-pill">⚡ 5 Tasks / Day Limit • Level 1-2</div>
+            <ul class="plan-features-list">
+              <li>✓ Unlocks Level 1 &amp; Level 2 Premium Tasks</li>
+              <li>✓ Complete up to 5 Premium Tasks per day</li>
+              <li>✓ 15 Days full VIP task clearance</li>
+              <li>✓ Instant 6-digit verification</li>
+            </ul>
+            <button type="button" class="btn-buy-vip-plan" onclick="purchaseVipPlan('15days')">
+              Activate for 500 ⭐ (Level 1 &amp; 2)
+            </button>
+          </div>
+        </div>
+
+        <!-- PLAN 2: 1000 Stars for 30 Days (15% OFF, 10 tasks / day) -->
+        <div class="vip-plan-card popular-plan" id="plan30Days">
+          <div class="plan-discount-badge popular-badge">🔥 POPULAR • LEVEL 1-4 • 20 SHOP LIMIT</div>
+          <div class="plan-card-body">
+            <div class="plan-duration-badge">30 DAYS (1 MONTH)</div>
+            <div class="plan-price-row">
+              <span class="plan-price-stars">1,000</span>
+              <span class="plan-price-unit">⭐ Stars</span>
+            </div>
+            <div class="plan-rate-sub">Full month VIP access</div>
+            <div class="plan-task-limit-pill popular-pill">⚡ 10 Tasks/Day • 20 Shop Buy Limit</div>
+            <ul class="plan-features-list">
+              <li>✓ Unlocks Level 1, Level 2, Level 3 &amp; Level 4 Tasks</li>
+              <li>✓ Upgrades Shop Buy Limit to 20 / Day</li>
+              <li>✓ Complete up to 10 Premium Tasks per day</li>
+              <li>✓ Priority task updates &amp; support</li>
+            </ul>
+            <button type="button" class="btn-buy-vip-plan popular-btn" onclick="purchaseVipPlan('30days')">
+              Activate for 1,000 ⭐ (Level 1-4)
+            </button>
+          </div>
+        </div>
+
+        <!-- PLAN 3: 5000 Stars for 3 Months (All Levels 1-5 Unlocked, 20 tasks / day) -->
+        <div class="vip-plan-card best-value-plan" id="plan90Days">
+          <div class="plan-discount-badge best-badge">⚡ ULTIMATE PASS • ALL LEVELS 1-5 • 20 TASKS/DAY</div>
+          <div class="plan-card-body">
+            <div class="plan-duration-badge">3 MONTHS (90 DAYS)</div>
+            <div class="plan-price-row">
+              <span class="plan-price-stars">5,000</span>
+              <span class="plan-price-unit">⭐ Stars</span>
+            </div>
+            <div class="plan-rate-sub">Full 3-Month Ultimate VIP clearance</div>
+            <div class="plan-task-limit-pill best-pill">⚡ Level 5 Unlocked • 20 Tasks/Day</div>
+            <ul class="plan-features-list">
+              <li>✓ Unlocks All Levels: Level 1, 2, 3, 4 &amp; Level 5</li>
+              <li>✓ Upgrades Shop Buy Limit to 20 / Day</li>
+              <li>✓ Complete up to 20 Premium Tasks per day</li>
+              <li>✓ 90 Days (3 Months) Ultimate clearance</li>
+            </ul>
+            <button type="button" class="btn-buy-vip-plan best-btn" onclick="purchaseVipPlan('90days')">
+              Activate for 5,000 ⭐ (Level 5 Unlocked)
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="vip-modal-footer-note">
+        <span>Simple Tasks remain 100% free with no subscription required.</span>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 6-Digit Code Task Verification Modal -->
+  <div class="task-verify-modal-overlay" id="taskVerifyModalOverlay" style="display: none;" onclick="handleVerifyModalBackdropClick(event)">
+    <div class="task-verify-modal-box" onclick="event.stopPropagation()">
+      <button type="button" class="verify-modal-close-btn" onclick="closeVerifyModal()" aria-label="Close modal">✕</button>
+      
+      <div class="verify-modal-header">
+        <div class="verify-modal-badge" id="verifyModalHeaderBadge">
+          <span class="verify-badge-dot"></span>
+          <span id="verifyModalHeaderBadgeText">WEBTASK VERIFICATION</span>
+        </div>
+        <h2 class="verify-modal-title">Enter 6-Digit Code</h2>
+        <div class="verify-modal-reward-badge">
+          <span>Reward:</span>
+          <span class="reward-highlight" id="verifyModalRewardHighlight">+5 ⭐</span>
+        </div>
+      </div>
+
+      <div class="verify-modal-task-card">
+        <div class="verify-card-icon" id="verifyModalTaskIcon">⚡</div>
+        <div class="verify-card-info">
+          <div class="verify-card-title" id="verifyModalTaskTitle">Webtask Mission</div>
+          <div class="verify-card-sub" id="verifyModalTaskDesc">Visit link &amp; get code from admin</div>
+        </div>
+        <a href="#" target="_blank" class="btn-verify-reopen-link" id="verifyModalLinkBtn" title="Re-open link in new tab">Open ↗</a>
+      </div>
+
+      <form class="verify-form" onsubmit="submitTaskVerification(event)">
+        <div class="verify-code-input-container">
+          <label class="verify-code-label" for="verifyCodeInput">Verification Code (6 Digits)</label>
+          <input 
+            type="text" 
+            id="verifyCodeInput" 
+            class="verify-code-input font-mono" 
+            maxlength="6" 
+            pattern="[0-9]{6}" 
+            inputmode="numeric" 
+            placeholder="000000" 
+            autocomplete="off"
+            required
+            oninput="handleVerifyCodeInput(this)"
+          >
+          <div class="verify-code-hint">Enter the 6-digit verification code for this task</div>
+          <div class="verify-error-msg" id="verifyErrorMsg" style="display: none;"></div>
+        </div>
+
+        <div class="verify-modal-btn-row">
+          <button type="button" class="btn-verify-cancel" onclick="closeVerifyModal()">Cancel</button>
+          <button type="submit" class="btn-verify-confirm" id="btnVerifyConfirm">Verify &amp; Win Coins 🪙</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Dual Option Task Unlock Modal (Coins OR Tickets) -->
+  <div class="task-verify-modal-overlay" id="taskUnlockModalOverlay" style="display: none;" onclick="handleUnlockModalBackdropClick(event)">
+    <div class="task-verify-modal-box" onclick="event.stopPropagation()" style="max-width: 440px; border-color: rgba(168, 85, 247, 0.45); box-shadow: 0 15px 45px rgba(0, 0, 0, 0.85), 0 0 25px rgba(168, 85, 247, 0.25);">
+      <button type="button" class="verify-modal-close-btn" onclick="closeTaskUnlockModal()" aria-label="Close modal">✕</button>
+      
+      <div class="verify-modal-header">
+        <div class="verify-modal-badge" style="background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.4); color: #c084fc;">
+          <span class="verify-badge-dot" style="background: #c084fc; box-shadow: 0 0 8px #c084fc;"></span>
+          <span>MISSION ACCESS LOCKED</span>
+        </div>
+        <h2 class="verify-modal-title" style="margin-top: 0.4rem;">Unlock Mission</h2>
+        <div style="font-size: 0.78rem; color: #94a3b8; margin-top: 0.25rem;">
+          Choose your unlock payment: Pay with Coins OR pay with Tickets to start earning!
+        </div>
+      </div>
+
+      <div class="verify-modal-task-card" style="background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(168, 85, 247, 0.35);">
+        <div class="verify-card-icon" id="unlockModalTaskIcon" style="background: rgba(168, 85, 247, 0.2); border: 1px solid rgba(168, 85, 247, 0.4); font-size: 1.4rem;">🔒</div>
+        <div class="verify-card-info">
+          <div class="verify-card-title" id="unlockModalTaskTitle" style="color: #ffffff; font-weight: 800; font-size: 0.95rem;">Webtask Mission</div>
+          <div class="verify-card-sub" id="unlockModalTaskReward" style="color: #fbbf24; font-weight: 800;">🪙 +50 Coins Bounty</div>
+        </div>
+      </div>
+
+      <!-- Dual Payment Options Row -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 1rem 0 0.85rem;">
+        <!-- Option 1: Unlock with Coins -->
+        <div id="unlockOptionCoinCard" style="background: rgba(234, 179, 8, 0.1); border: 1.5px solid rgba(250, 204, 21, 0.4); border-radius: 14px; padding: 0.85rem; text-align: center; display: flex; flex-direction: column; justify-content: space-between;">
+          <div>
+            <div style="font-size: 0.68rem; color: #fde047; font-weight: 800; text-transform: uppercase;">Option 1: Coins</div>
+            <div id="unlockModalCoinCostText" style="font-size: 1.15rem; color: #facc15; font-weight: 900; margin: 3px 0;">🪙 50</div>
+            <div style="font-size: 0.68rem; color: #94a3b8;">Balance: <span id="unlockModalUserCoinsText" style="color: #ffffff; font-weight: 800;">0</span></div>
+          </div>
+          <button type="button" class="btn-verify-confirm" id="btnConfirmUnlockCoin" onclick="confirmUnlockTask('coins')" style="margin-top: 8px; padding: 6px 10px; font-size: 0.75rem; background: linear-gradient(135deg, #eab308 0%, #ca8a04 100%); color: #000; font-weight: 900; border-radius: 8px;">
+            Pay Coins 🪙
+          </button>
+        </div>
+
+        <!-- Option 2: Unlock with Tickets -->
+        <div id="unlockOptionTicketCard" style="background: rgba(168, 85, 247, 0.1); border: 1.5px solid rgba(168, 85, 247, 0.4); border-radius: 14px; padding: 0.85rem; text-align: center; display: flex; flex-direction: column; justify-content: space-between;">
+          <div>
+            <div style="font-size: 0.68rem; color: #c084fc; font-weight: 800; text-transform: uppercase;">Option 2: Tickets</div>
+            <div id="unlockModalTicketCostText" style="font-size: 1.15rem; color: #c084fc; font-weight: 900; margin: 3px 0;">🎟️ 2</div>
+            <div style="font-size: 0.68rem; color: #94a3b8;">Balance: <span id="unlockModalUserTicketsText" style="color: #38bdf8; font-weight: 800;">0</span></div>
+          </div>
+          <button type="button" class="btn-verify-confirm" id="btnConfirmUnlockTicket" onclick="confirmUnlockTask('tickets')" style="margin-top: 8px; padding: 6px 10px; font-size: 0.75rem; background: linear-gradient(135deg, #a855f7 0%, #7e22ce 100%); color: #fff; font-weight: 900; border-radius: 8px;">
+            Pay Tickets 🎟️
+          </button>
+        </div>
+      </div>
+
+      <!-- Alert / Notice message -->
+      <div id="unlockModalAlertMsg" style="display: none; padding: 0.65rem; border-radius: 10px; font-size: 0.78rem; font-weight: 700; margin-bottom: 0.75rem; text-align: center;"></div>
+
+      <div style="text-align: center; margin-top: 0.25rem;">
+        <button type="button" class="btn-verify-cancel" onclick="closeTaskUnlockModal()" style="padding: 0.45rem 1.25rem; font-size: 0.8rem;">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+
+
+  <script src="script.js"></script>
+  <script src="../../daily-streak.js"></script>
+
+  <!-- REWARDED AD MODAL (Watch Ad to Unlock +5 More Tasks) -->
+  <div class="task-verify-modal-overlay" id="rewardedAdModalOverlay" style="display: none; position: fixed; inset: 0; background: rgba(3, 8, 22, 0.88); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); z-index: 10005; align-items: center; justify-content: center; padding: 1rem; box-sizing: border-box;" onclick="if(event.target===this) this.style.display='none'">
+    <div class="rewarded-ad-card" style="background: linear-gradient(145deg, #0f172a 0%, #0a0f1d 100%); border: 2px solid rgba(250, 204, 21, 0.45); border-radius: 20px; width: 100%; max-width: 420px; padding: 1.25rem; box-sizing: border-box; box-shadow: 0 16px 45px rgba(0, 0, 0, 0.85), 0 0 30px rgba(250, 204, 21, 0.25); text-align: center; position: relative;">
+      
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <span style="font-size: 0.7rem; font-weight: 800; color: #facc15; background: rgba(250, 204, 21, 0.15); border: 1px solid rgba(250, 204, 21, 0.4); padding: 2px 8px; border-radius: 999px;">SPONSORED REWARD</span>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span id="adCountdownBadge" style="font-size: 0.75rem; font-weight: 800; color: #94a3b8; background: rgba(255, 255, 255, 0.08); padding: 2px 8px; border-radius: 999px;">Reward in: <b id="adCountdownSeconds" style="color: #facc15;">5s</b></span>
+          <button type="button" onclick="document.getElementById('rewardedAdModalOverlay').style.display='none'" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #fff; width: 26px; height: 26px; border-radius: 50%; cursor: pointer; font-size: 0.8rem; font-weight: 900; display: flex; align-items: center; justify-content: center;" title="Cancel">✕</button>
+        </div>
+      </div>
+
+      <div style="padding: 1rem 0;">
+        <div style="font-size: 3rem; margin-bottom: 0.5rem; animation: pulse 1.5s infinite;">📺</div>
+        <h3 style="color: #ffffff; font-weight: 900; font-size: 1.2rem; margin: 0 0 0.4rem 0;">Renew Daily Tasks</h3>
+        <p style="color: #94a3b8; font-size: 0.82rem; margin: 0 auto; max-width: 320px; line-height: 1.4;">
+          Watch this short sponsored message to unlock <b style="color: #facc15;">+5 Extra Star Tasks</b> for today!
+        </p>
+      </div>
+
+      <!-- Animated Progress Bar -->
+      <div style="background: rgba(255, 255, 255, 0.08); border-radius: 999px; height: 10px; overflow: hidden; margin-bottom: 1.25rem; border: 1px solid rgba(250, 204, 21, 0.3);">
+        <div id="adProgressFill" style="background: linear-gradient(90deg, #facc15, #f59e0b); height: 100%; width: 0%; transition: width 0.1s linear;"></div>
+      </div>
+
+      <button type="button" id="btnClaimAdReward" disabled onclick="finishRewardedAd()" style="width: 100%; background: rgba(250, 204, 21, 0.3); border: 1.5px solid rgba(250, 204, 21, 0.5); color: #94a3b8; font-weight: 900; font-size: 0.95rem; padding: 0.75rem 1rem; border-radius: 12px; cursor: not-allowed; transition: all 0.25s ease; box-shadow: none;">
+        ⏳ Watching Ad...
+      </button>
+
+    </div>
+  </div>
+</body>
+</html>
